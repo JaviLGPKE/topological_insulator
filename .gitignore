@@ -1,0 +1,73 @@
+### VS Code ###
+.vscode
+
+## proteo ##
+results_*
+
+## PETSC ##
+*.log
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+outputs/
+*.py[cod]
+*$py.class
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Distribution / packaging
+.Python
+solver_proteo.egg-info/
+results/
+__pycache__/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Sphinx documentation
+docs/_build/
+docs/build/
+docs/latex/
+
+# PETSC logs
+*.log
+matrix_output.txt
+
+# Docker
+# docker/

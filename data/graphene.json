@@ -1,0 +1,22 @@
+{
+    "general":{
+        "name": {"value": "graphene"},
+        "dimensions": {"value": 2}
+    },
+    "eigenvalues":{
+        "on_site": {"value": 1, "constant": true, "unit": "eV"},
+        "nn_hopping": {"value": 1, "constant": true, "unit": "eV"},
+        "nnn_hopping": {"value": 1, "constant": true,"unit": "eV"},
+        "interaction_energy": {"value": 1, "constant": true, "unit": "eV"},
+        "spin_orbit_coupling": {"value": 1, "constant": true, "unit": "eV"}
+    },
+    "structure":{
+        "sublattices": {"value": 2},
+        "coordinates":{"value": [0, 0, 0], "space":"position"},
+        "lattice_vectors": {"value":[["1/2", "pow(3, 0.5)/2"], ["0", "1/pow(3, 0.5)"]], "space":"position"}
+    },
+    "orbitals":{
+        "hole": {"value": "p-orbital"}
+    }
+    
+}
