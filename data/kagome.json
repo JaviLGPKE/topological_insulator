@@ -14,18 +14,10 @@
   },
   "geometry": 
   {
-    "size": { "value": [5, 5] },
+    "size": { "value": [10, 10] },
     "lattice_constant": {"value": 2.46e-10, "nn_factor": 0.5, "space":"position"},
     "sublattices": { "value": 3 },
-    "lattice_vectors": {
-      "value": [["1", "0"], ["1/2", "pow(3, 0.5)/2"]],
-      "space": "position"
-    },
-    "delta_vectors": {
-      "value": [["0", "0"], ["1/2", "0"], ["1/4", "pow(3, 0.5)/4"]],
-      "space": "position"
-    }
-  },
-  "orbitals": {
+    "lattice_vectors": {"value": [["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"},
+    "delta_vectors": {"value": [["0", "0"], ["1/2", "0"], ["1/4", "pow(3, 0.5)/4"]], "space": "position"}
   }
 }
