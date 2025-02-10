@@ -16,43 +16,47 @@ class TightBinding:
             "nearest_neighbour_hopping", "spin_orbit_interaction", "coulomb_interaction"
         ]
 
-    def slater_koster(self, cell_parser: CellParser, theta_list):
+    def slater_koster(self, cell_parser: CellParser, directional_cosines):
         nn_parser = cell_parser.eigenvalues.nn_hopping.value
-        l, m, n = 0, 0, 0 # TODO: make and use theta_list
-        slater_koster_coefficients = {
-            "t_s_s": nn_parser["t_ss_sigma"],
-            "t_s_x": l * nn_parser["t_sp_sigma"],
-            "t_x_x": l**2 * nn_parser["t_pp_sigma"] + (1 - l**2) * nn_parser["t_pp_pi"],
-            "t_x_y": l * m * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"]),
-            "t_x_z": l * n * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"])
-        }
+        n = 0 # TODO: implement bukcling angle in json
+        slater_koster_coefficients = {}
+        for bond_idx, cosines in enumerate(directional_cosines):
+            l, m = cosines
+            slater_koster_coefficients[bond_idx] = {
+                "t_s_s": nn_parser["t_ss_sigma"],
+                "t_s_x": l * nn_parser["t_sp_sigma"],
+                "t_x_x": l**2 * nn_parser["t_pp_sigma"] + (1 - l**2) * nn_parser["t_pp_pi"],
+                "t_x_y": l * m * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"]),
+                "t_x_z": l * n * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"])
+            }
         return slater_koster_coefficients
 
     def setup(self, cell_parser: CellParser, geometry: Geometry):
+        self.k = np.array([geometry.kx_grid, geometry.ky_grid])
         bulk_idx, neighbours_idx, self.dr_list = geometry.get_bulk_data()
-        theta_list = geometry.bond_orientation(bulk_idx, neighbours_idx)
-        self.slater_koster_coefficients = self.slater_koster(cell_parser, theta_list)
+        directional_cosines = geometry.bond_orientation(self.dr_list)
+        self.slater_koster_coefficients = self.slater_koster(cell_parser, directional_cosines)
     
-    def get_eigenvalues(self, cell_parser: CellParser, geometry: Geometry):
+    def eigenvalues(self):
+        if not self.model_options.dispersion:
+            return
         print(f"Calculating eigenvalues...")
-        # Dispersion Relation
-        t_s = self.slater_koster_coefficients["t_s_s"] 
-        t_list = [t_s for i, _ in enumerate(self.dr_list)] 
-        if self.model_options.dispersion:
-            k_vec = np.array([geometry.kx_grid, geometry.ky_grid])
-            f_k = self.nearest_neighbour_hopping(
-                k=k_vec, dr_list=self.dr_list, t_list=t_list
-            )
-            self.E_plus_map = np.abs(f_k)
-            self.E_minus_map = -1 * np.abs(f_k)
-        # TODO: # Band Structure
-        # if self.model_options.band_structure:
-        #     self.band_strucure(cell_parser, geometry, dr_list)
+        # Tight-Binding Model
+        # TODO: Implement:
+        # 1) On-Site Energy
+        # 2) Mean-Field Interaction
+        f_k = 0
+        for i, dr in enumerate(self.dr_list):
+            slater_koster = self.slater_koster_coefficients[i]
+            for t_alpha in slater_koster.values():
+                # Nearest-Neighbour Hopping
+                f_k += self.nearest_neighbour_hopping(self.k, dr, t_alpha)
+        self.E_plus_map = np.abs(f_k)
+        self.E_minus_map = -1 * np.abs(f_k)
         print(f"Eigenvalues calculated.")
 
-    def nearest_neighbour_hopping(self, k, dr_list, t_list):
-        return sum(t_list[i] * np.exp(1j * (k[0]*dr[0] + k[1]*dr[1]))
-               for i, dr in enumerate(dr_list))
+    def nearest_neighbour_hopping(self, k, dr, t_alpha):
+        return t_alpha * np.exp(1j * (k[0]*dr[0] + k[1]*dr[1]))
 
     def coulomb_interaction(self):
         #TODO

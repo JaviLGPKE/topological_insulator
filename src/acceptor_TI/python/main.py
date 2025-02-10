@@ -25,16 +25,13 @@ class Problem:
         )
     
     def run(self):
-        self.tight_binding.get_eigenvalues(
-            cell_parser=self.cell_parser, 
-            geometry=self.geometry
-        )
+        self.tight_binding.eigenvalues()
     
     def plot(self, type="lattice"):
         if type == "lattice":
             self.geometry.plot_lattice()
         elif type == "dispersion":
             self.tight_binding.plot_dispersion(self.geometry)
-        elif type == "band_structure":
-            self.tight_binding.plot_band_structure(self.geometry)
+        # elif type == "band_structure":
+        #     self.tight_binding.plot_band_structure(self.geometry)
             

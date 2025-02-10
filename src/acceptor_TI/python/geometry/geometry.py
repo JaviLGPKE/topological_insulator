@@ -132,18 +132,16 @@ class Geometry:
     def get_edge_data(self):
         # TODO: similar process to bulk but for the continuous edges
         return
-    
-    def bond_orientation(self, bulk_idx, neighbours_idx, ref_vector=None):
-        # NOTE: For a list of signed angles (in radians) between ref_vector and each neighbor.
-        # where a positive angle means the neighbor is counterclockwise from ref_vector.
-        # angle = np.arctan2(ref_vector[0]*neighbour_site[1] - ref_vector[1]*neighbour_site[0],
-        #                     np.dot(ref_vector, neighbour_site))
-        bulk_site = self.sites[bulk_idx]
-        bulk_norm = np.linalg.norm(bulk_site)
-        neighours_sites = self.sites[neighbours_idx]
-        theta_list = []
-        # TODO: finish
-        return theta_list
+
+    def bond_orientation(self, dr_list):
+        cos_theta_list = []
+        for dr in dr_list:
+            bond_length = np.linalg.norm(dr)
+            assert(bond_length != 0)
+            cos_theta = dr / bond_length
+            cos_theta_list.append(cos_theta)
+        return np.array(cos_theta_list)
+
 
     def plot_lattice(self, ax=None):
         """
