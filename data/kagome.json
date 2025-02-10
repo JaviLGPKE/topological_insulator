@@ -1,0 +1,30 @@
+{
+  "general": {
+    "name": { "value": "Kagome" },
+    "dimensions": { "value": 2 }
+  },
+  "eigenvalues":{
+        "on_site": {"value": {
+            "E_s":0,
+            "E_x":0,
+            "E_y":0,
+            "E_z":0
+        }, "type":"dict", "constant": true,"unit": "eV"},
+        "nn_hopping": {
+            "value": {
+                "t_ss_sigma": -1,
+                "t_sp_sigma": 0,
+                "t_pp_sigma": 0,
+                "t_pp_pi": 0
+            }, "type":"dict", "constant": true,"unit": "eV"},
+        "interaction_strength": {"value": {
+            "V_0": 0,
+            "V_2": 0
+        }, "type":"dict", "constant": true,"unit": "eV"}
+    },
+  "geometry": {
+    "lattice_constant": {"value": 1, "nn_factor": 0.5, "space":"position"},
+    "lattice_vectors": {"value": [["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"},
+    "delta_vectors": {"value": [["0", "0"], ["1/2", "0"], ["1/4", "pow(3, 0.5)/4"]], "space": "position"}
+  }
+}

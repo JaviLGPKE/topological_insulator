@@ -1,27 +1,37 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-# import kwant
-# import quspin
-
+from .model_options import ModelOptions
 from .cell_parser import CellParser
+from .geometry import Geometry
+from .hamiltonian import TightBinding
 
 class Problem:
-    def __init__(self, cell_parser:CellParser, save_path=None):
-        self.cell_parser = cell_parser
-        # Matrices
-        self.I = np.identity(self.cell_parser.general.dimensions.value)
-        self.s_x = np.array([[0, 1], [1, 0]])
-        self.s_y = np.array([[0, -1j], [1j, 0]])
-        self.s_z = np.diag([1, -1])
-
-    # def next_nearest_neighbours(self):
-    #     A, B = self.lattice.sublattices 
-    #     NN_A = (((-1, 0), A, A), ((0, 1), A, A), ((1, -1), A, A))
-    #     NN_B = (((1, 0), B, B), ((0, -1), B, B), ((-1, 1), B, B))
-    #     return NN_A + NN_B
+    def __init__(self, data_path:str, file_name:str, save_path=None):
+        self.cell_parser = CellParser(data_path=data_path, file_name=file_name)
     
-    # def on_site(self, site, parameters):
-    #     A, B = self.lattice.sublattices 
-    #     return parameters.m * (1 if site.family == A else -1)
-        
+    def setup(self, size=10, N_k=200, dispersion=True, band_structure=False):
+        assert(size >= 10)
+        # Model Options
+        model_options = ModelOptions(size, N_k, dispersion, band_structure)
+        # Geometry
+        self.geometry = Geometry(model_options=model_options, cell_parser=self.cell_parser)
+        self.geometry.build_lattice(size, N_k)
+        # Tight-Binding
+        self.tight_binding = TightBinding(model_options=model_options)
+        self.tight_binding.setup(
+            cell_parser=self.cell_parser, 
+            geometry=self.geometry
+        )
+    
+    def run(self):
+        self.tight_binding.eigenvalues()
+    
+    def plot(self, type="lattice"):
+        if type == "lattice":
+            self.geometry.plot_lattice()
+        elif type == "dispersion":
+            self.tight_binding.plot_dispersion(self.geometry)
+        # elif type == "band_structure":
+        #     self.tight_binding.plot_band_structure(self.geometry)
+            
