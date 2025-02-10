@@ -11,83 +11,115 @@ class TightBinding:
     spin-orbit coupling interaction and Coulomb repulsive interaction terms.
     """
     def __init__(self, model_options:ModelOptions):
+        self.model_options = model_options
         self.available_terms = [
             "nearest_neighbour_hopping", "spin_orbit_interaction", "coulomb_interaction"
         ]
 
-    def build_hamiltonian(self, cell_parser:CellParser, geometry:Geometry):
-        print(f"Calculating eigenvalues...")
-        #### FIXME: Only works for s-orbitals
-        size = len(geometry.sites)
-        k_vec = geometry.k_vec
-        bulk_idx, neighbors_idx, dr_list = geometry.get_bulk_data()
-        from IPython import embed; embed()
-        t_s = -2.8  # eV
-        Eplus  = np.zeros(len(k_vec), dtype=np.complex128)
-        Eminus = np.zeros(len(k_vec), dtype=np.complex128)
+    def slater_koster(self, cell_parser: CellParser, theta_list):
+        nn_parser = cell_parser.eigenvalues.nn_hopping.value
+        l, m, n = 0, 0, 0 # TODO: make and use theta_list
+        slater_koster_coefficients = {
+            "t_s_s": nn_parser["t_ss_sigma"],
+            "t_s_x": l * nn_parser["t_sp_sigma"],
+            "t_x_x": l**2 * nn_parser["t_pp_sigma"] + (1 - l**2) * nn_parser["t_pp_pi"],
+            "t_x_y": l * m * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"]),
+            "t_x_z": l * n * (nn_parser["t_pp_sigma"] - nn_parser["t_pp_pi"])
+        }
+        return slater_koster_coefficients
 
-        for i, k in enumerate(k_vec):
-            # f(k) = sum_{NN} exp(ik · dr)
-            f_k = sum(np.exp(1j * np.dot(k, dr)) for dr in dr_list)
-            val = t_s * np.abs(f_k)
-            Eplus[i]  =  val   # "upper" band
-            Eminus[i] = -val   # "lower" band
-        self.Eplus_map  = Eplus.reshape((size, size)).real
-        self.Eminus_map = Eminus.reshape((size, size)).real
+    def setup(self, cell_parser: CellParser, geometry: Geometry):
+        bulk_idx, neighbours_idx, self.dr_list = geometry.get_bulk_data()
+        theta_list = geometry.bond_orientation(bulk_idx, neighbours_idx)
+        self.slater_koster_coefficients = self.slater_koster(cell_parser, theta_list)
+    
+    def get_eigenvalues(self, cell_parser: CellParser, geometry: Geometry):
+        print(f"Calculating eigenvalues...")
+        # Dispersion Relation
+        t_s = self.slater_koster_coefficients["t_s_s"] 
+        t_list = [t_s for i, _ in enumerate(self.dr_list)] 
+        if self.model_options.dispersion:
+            k_vec = np.array([geometry.kx_grid, geometry.ky_grid])
+            f_k = self.nearest_neighbour_hopping(
+                k=k_vec, dr_list=self.dr_list, t_list=t_list
+            )
+            self.E_plus_map = np.abs(f_k)
+            self.E_minus_map = -1 * np.abs(f_k)
+        # TODO: # Band Structure
+        # if self.model_options.band_structure:
+        #     self.band_strucure(cell_parser, geometry, dr_list)
         print(f"Eigenvalues calculated.")
 
-    def _nearest_neighbour_hopping(self):
+    def nearest_neighbour_hopping(self, k, dr_list, t_list):
+        return sum(t_list[i] * np.exp(1j * (k[0]*dr[0] + k[1]*dr[1]))
+               for i, dr in enumerate(dr_list))
+
+    def coulomb_interaction(self):
         #TODO
         return
 
-    def _coulomb_interaction(self):
+    def change_term(self, term:str, eigenvalue:float=0, i:int=None, j:int=None)->None: 
         #TODO
         return
-
-    def _change_term(self, term:str, eigenvalue:float=0, i:int=None, j:int=None)->None: 
-        #TODO
-        return
-
+    
     def plot_dispersion(self, geometry: Geometry):
+        assert(self.model_options.dispersion)
         print(f"Plotting dispersion...")
-        u_grid = geometry.kx_grid
-        v_grid = geometry.ky_grid
-        Eplus_map  = self.Eplus_map
-        Eminus_map = self.Eminus_map
-        b1 = geometry.b1
-        b2 = geometry.b2
-        nx, ny = u_grid.shape
-        kx_matrix = np.zeros_like(u_grid)
-        ky_matrix = np.zeros_like(u_grid)
-
-        # Convert each (u,v) -> (kx, ky)
-        for i in range(nx):
-            for j in range(ny):
-                u = u_grid[i, j]
-                v = v_grid[i, j]
-                kxy = u * b1 + v * b2
+        kx_matrix = np.zeros_like(geometry.kx_grid)
+        ky_matrix = np.zeros_like(geometry.ky_grid)
+        # Convert grid (u,v) → (kx, ky)
+        for i in range(geometry.kx_grid.shape[0]):
+            for j in range(geometry.ky_grid.shape[1]):
+                u = geometry.kx_grid[i, j]
+                v = geometry.ky_grid[i, j]
+                kxy = u*geometry.b1 + v*geometry.b2
                 kx_matrix[i, j] = kxy[0]
                 ky_matrix[i, j] = kxy[1]
-
+        # Plot 3D surface
         fig = plt.figure(figsize=(10,6))
         ax = fig.add_subplot(111, projection='3d')
-
-        allE = np.concatenate([Eplus_map.ravel(), Eminus_map.ravel()])
-        vmin, vmax = allE.min(), allE.max()
-
-        surf1 = ax.plot_surface(kx_matrix, ky_matrix, Eplus_map,
-                                cmap='coolwarm', vmin=vmin, vmax=vmax, alpha=0.8)
-        surf2 = ax.plot_surface(kx_matrix, ky_matrix, Eminus_map,
-                                cmap='coolwarm', vmin=vmin, vmax=vmax, alpha=0.8)
-
-        m = plt.cm.ScalarMappable(cmap='coolwarm')
-        m.set_array(allE)
-        m.set_clim(vmin, vmax)
-        fig.colorbar(m, ax=ax, pad=0.1, label="Energy (eV)")
-
-        ax.set_title("Honeycomb NN Dispersion in the Actual BZ")
+        surf1 = ax.plot_surface(kx_matrix, ky_matrix, self.E_plus_map, cmap='coolwarm', alpha=0.8)
+        surf2 = ax.plot_surface(kx_matrix, ky_matrix, self.E_minus_map, cmap='coolwarm', alpha=0.8)
+        # Overlay high-symmetry path
+        # ax.plot(geometry.k_path[:,0], geometry.k_path[:,1], self.Eplus_band, 
+        #         color='black', linewidth=2, label='Γ→K→M→Γ')
+        # ax.plot(geometry.k_path[:,0], geometry.k_path[:,1], self.Eminus_band, 
+        #         color='black', linewidth=2)
         ax.set_xlabel("k_x")
         ax.set_ylabel("k_y")
         ax.set_zlabel("E (eV)")
-        plt.tight_layout()
+        # plt.legend()
+        plt.show()
+    
+    def plot_band_structure(self, geometry: Geometry):
+        assert(self.model_options.band_structure)
+        print("Plotting band structure...")
+        N_k = geometry.N_k
+        k_vec = geometry.k_path
+        Eplus = self.E_plus_band  
+        Eminus = self.E_minus_band 
+
+        # Create a parametric x-axis for the k-path (Γ → K → M → Γ)
+        k_path_length = np.arange(len(k_vec))
+        plt.figure(figsize=(10, 6))
+        plt.plot(k_path_length, Eplus, label='E+', color='blue')
+        plt.plot(k_path_length, Eminus, label='E-', color='red')
+
+        # Positions must be scalars
+        positions = [
+            0, 
+            N_k**2, 
+            2 * N_k**2, 
+            3 * N_k**2 - 1
+        ]
+        plt.xticks(
+            positions,
+            ['Γ', 'K', 'M', 'Γ'],
+            fontsize=12
+        )
+
+        plt.xlabel('High-Symmetry Path')
+        plt.ylabel('Energy (eV)')
+        plt.legend()
+        plt.grid(True)
         plt.show()

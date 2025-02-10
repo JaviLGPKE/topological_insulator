@@ -1,16 +1,18 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
+from ..model_options import ModelOptions
 from ..cell_parser import CellParser
 
 class Geometry:
-    def __init__(self, cell_parser:CellParser):
+    def __init__(self, model_options:ModelOptions, cell_parser:CellParser):
+        self.model_options = model_options
         self.cell_parser = cell_parser
         self.name = cell_parser.general.name.value
         self.n_dim = cell_parser.general.dimensions.value
         self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
 
-    def build_lattice(self) -> None:
+    def build_lattice(self, size, N_k) -> None:
         """
         Builds the lattice structure in real space.
 
@@ -19,26 +21,26 @@ class Geometry:
         parser: Parameter
             The dictionary containing the geometrical parameters to replicate the lattice.
         """
+        self.N_k = N_k
         lattice_vectors = self.cell_parser.geometry.lattice_vectors.value
         assert(len(lattice_vectors[0]) == self.n_dim)
 
         print(f"Building Geometry...")
-        self._build_lattice(self.cell_parser)
+        self._build_lattice(size, self.cell_parser)
         self._set_connectivity(self.cell_parser)
-        self._build_brillouine_zone()
+        self._build_brillouine_zone(size, N_k)
         print(f"Geometry Completed.")
 
-    def _build_lattice(self, parser):
-        size = parser.geometry.size.value
-        a = parser.geometry.lattice_constant.value
+    def _build_lattice(self, size, parser):
+        self.lattice_constant = a = parser.geometry.lattice_constant.value
         lattice_vectors = parser.geometry.lattice_vectors.value
+        self.a1, self.a2 = a1, a2 = lattice_vectors[0], lattice_vectors[1]
         delta_vectors = parser.geometry.delta_vectors.value
         # Build lattice
         sites, sublattice_label = [], []
         site_index = 0
-        self.a1, self.a2 = a1, a2 = lattice_vectors[0], lattice_vectors[1]
-        for i in range(size[0]):
-            for j in range(size[1]):
+        for i in range(size):
+            for j in range(size):
                 for s, delta in enumerate(delta_vectors):
                     x = (i * a1[0] + j * a2[0] + delta[0]) * a
                     y = (i * a1[1] + j * a2[1] + delta[1]) * a
@@ -80,43 +82,68 @@ class Geometry:
                     C[j, i] = 1
         self.connectivity_matrix = C
 
-    def _build_brillouine_zone(self):
-        size = len(self.sites)
+    def _build_brillouine_zone(self, size, N_k):
         # Reciprocal vectors
+        a = self.lattice_constant
         a1, a2 = self.a1, self.a2
         area = a1[0]*a2[1] - a1[1]*a2[0]
-        self.b1 = b1 = (2*np.pi / area) * np.array([ a2[1], -a2[0] ])
-        self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1],  a1[0] ])
-        # K space
-        kx_vals, ky_vals = np.linspace(-0.5, 0.5, size), np.linspace(-0.5, 0.5, size)
-        self.kx_grid, self.ky_grid = kx_grid, ky_grid = np.meshgrid(kx_vals, ky_vals)
-        uv_pairs = np.column_stack((kx_grid.ravel(), ky_grid.ravel()))
-        k_vec = []
-        for (u, v) in uv_pairs:
-            k_vec.append( u*b1 + v*b2 )
-        self.k_vec = np.array(k_vec)
+        self.b1 = b1 = (2*np.pi / area) * np.array([a2[1], -a2[0]])
+        self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1], a1[0]])
+        # Generate grid for 3D dispersion plot
+        if self.model_options.dispersion:
+            self.kx_vals, self.ky_vals = kx_vals, ky_vals = (
+                np.linspace(-2*np.pi/a, 2*np.pi/a, N_k), np.linspace(-2*np.pi/a, 2*np.pi/a, N_k))
+            self.kx_grid, self.ky_grid = np.meshgrid(kx_vals, ky_vals)
+        # TODO: Generate high-symmetry path for band structure
+        # if self.model_options.band_structure:
+            # gamma = np.array([0.0, 0.0])
+            # k_point = np.array([1/3, 1/3])
+            # m_point = np.array([0.5, 0.0])
+            # path = [gamma, k_point, m_point, gamma]
+            # self.k_path = []
+            # for i in range(len(path)-1):
+            #     start = path[i]
+            #     end = path[i+1]
+            #     for t in np.linspace(0, 1, size**2):
+            #         frac_coords = (1 - t)*start + t*end
+            #         k = frac_coords[0]*b1 + frac_coords[1]*b2
+            #         self.k_path.append(k)
+            # self.k_path = np.array(self.k_path)
     
     def get_bulk_data(self):
+        a = self.lattice_constant
         bulk_sublattices = [0]
         sites = self.sites
         C = self.connectivity_matrix
         x_max = max(sites[:, 0])
         y_max = max(sites[:, 1])
-        bulk_x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1))[0]
-        bulk_y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1))[0]
+        bulk_x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1 * a))[0]
+        bulk_y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1 * a))[0]
         bulk_idx_candidates   = np.intersect1d(bulk_x_idxs, bulk_y_idxs)
         chosen_bulk = [c for c in bulk_idx_candidates if self.sublattice_label[c] in bulk_sublattices]
         if not chosen_bulk:
             raise ValueError(f"No site found near the center in sublattices = {bulk_sublattices}!")
         bulk_idx = bulk_idx = chosen_bulk[0]
-        neighborsA = np.where(C[bulk_idx, :] == 1)[0]
-        neighbors_idx = [n for n in neighborsA if self.sublattice_label[n] in self.distinct_labels]
-        dr_list = [sites[n] - sites[bulk_idx] for n in neighbors_idx]
-        return bulk_idx, neighbors_idx, dr_list
-    
+        neighboursA = np.where(C[bulk_idx, :] == 1)[0]
+        neighbours_idx = [n for n in neighboursA if self.sublattice_label[n] in self.distinct_labels]
+        dr_list = [sites[n] - sites[bulk_idx] for n in neighbours_idx]
+        return bulk_idx, neighbours_idx, dr_list
+
     def get_edge_data(self):
         # TODO: similar process to bulk but for the continuous edges
         return
+    
+    def bond_orientation(self, bulk_idx, neighbours_idx, ref_vector=None):
+        # NOTE: For a list of signed angles (in radians) between ref_vector and each neighbor.
+        # where a positive angle means the neighbor is counterclockwise from ref_vector.
+        # angle = np.arctan2(ref_vector[0]*neighbour_site[1] - ref_vector[1]*neighbour_site[0],
+        #                     np.dot(ref_vector, neighbour_site))
+        bulk_site = self.sites[bulk_idx]
+        bulk_norm = np.linalg.norm(bulk_site)
+        neighours_sites = self.sites[neighbours_idx]
+        theta_list = []
+        # TODO: finish
+        return theta_list
 
     def plot_lattice(self, ax=None):
         """

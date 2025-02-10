@@ -1,19 +1,29 @@
 {
     "general":{
-        "name": {"value": "Honeycomb"},
+        "name": {"value": "honeycomb"},
         "dimensions": {"value": 2}
     },
     "eigenvalues":{
-        "on_site": {"value": 0, "constant": true, "unit": "eV"},
-        "nn_hopping": {"value": 0, "constant": true, "unit": "eV"},
-        "nnn_hopping": {"value": 0, "constant": true,"unit": "eV"},
-        "interaction_strength": {"value": 0, "constant": true, "unit": "eV"},
-        "spin_orbit_coupling": {"value": 0, "constant": true, "unit": "eV"}
+        "on_site": {"value": {
+            "E_s":0,
+            "E_x":0,
+            "E_y":0,
+            "E_z":0
+        }, "type":"dict", "constant": true,"unit": "eV"},
+        "nn_hopping": {
+            "value": {
+                "t_ss_sigma": -1,
+                "t_sp_sigma": 0,
+                "t_pp_sigma": 0,
+                "t_pp_pi": 0
+            }, "type":"dict", "constant": true,"unit": "eV"},
+        "interaction_strength": {"value": {
+            "V_0": 0,
+            "V_2": 0
+        }, "type":"dict", "constant": true,"unit": "eV"}
     },
     "geometry":{
-        "size":{"value": [40, 40]},
         "lattice_constant": {"value": 1, "nn_factor": 1.0, "space":"position"},
-        "sublattices": {"value": 2},
         "lattice_vectors": {"value":[["3/2", "pow(3, 0.5)/2"], ["3/2", "-1*pow(3, 0.5)/2"]], "space":"position"},
         "delta_vectors": {"value":[["0", "0"], ["1/2", "pow(3, 0.5)/2"]], "space":"position"}
     }
