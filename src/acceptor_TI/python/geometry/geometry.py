@@ -10,6 +10,7 @@ class Geometry:
         self.cell_parser = cell_parser
         self.name = cell_parser.general.name.value
         self.n_dim = cell_parser.general.dimensions.value
+        self.n_sublattices = len(cell_parser.geometry.delta_vectors.value)
         self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
 
     def build_lattice(self, size, N_k) -> None:
@@ -22,20 +23,21 @@ class Geometry:
             The dictionary containing the geometrical parameters to replicate the lattice.
         """
         self.N_k = N_k
-        lattice_vectors = self.cell_parser.geometry.lattice_vectors.value
+        parser = self.cell_parser.geometry
+        lattice_vectors = parser.lattice_vectors.value
         assert(len(lattice_vectors[0]) == self.n_dim)
 
         print(f"Building Geometry...")
-        self._build_lattice(size, self.cell_parser)
-        self._set_connectivity(self.cell_parser)
+        self._build_lattice(size, parser)
+        self._set_connectivity(parser)
         self._build_brillouine_zone(size, N_k)
         print(f"Geometry Completed.")
 
     def _build_lattice(self, size, parser):
-        self.lattice_constant = a = parser.geometry.lattice_constant.value
-        lattice_vectors = parser.geometry.lattice_vectors.value
+        self.lattice_constant = a = parser.lattice_constant.value
+        lattice_vectors = parser.lattice_vectors.value
         self.a1, self.a2 = a1, a2 = lattice_vectors[0], lattice_vectors[1]
-        delta_vectors = parser.geometry.delta_vectors.value
+        delta_vectors = parser.delta_vectors.value
         # Build lattice
         sites, sublattice_label = [], []
         site_index = 0
@@ -48,8 +50,8 @@ class Geometry:
                     sublattice_label.append(s)
                     site_index += 1
         self.sites = np.array(sites)
-        self.sublattice_label = np.array(sublattice_label, dtype=int)
-        self.distinct_labels = np.unique(self.sublattice_label[self.sublattice_label != 0])
+        self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
+        self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
         
     def _set_connectivity(self, parser, tol=1e-12) -> None:
         """
@@ -64,8 +66,8 @@ class Geometry:
             Tolerance for considering distances as equal to 'reference_dist'.
         """
         sites = self.sites
-        a = parser.geometry.lattice_constant.value
-        nn_factor = parser.geometry.lattice_constant.nn_factor
+        a = parser.lattice_constant.value
+        nn_factor = parser.lattice_constant.nn_factor
         N = len(sites)     
         C = np.zeros((N, N), dtype=int)
         for i in range(N):
@@ -92,7 +94,7 @@ class Geometry:
         # Generate grid for 3D dispersion plot
         if self.model_options.dispersion:
             self.kx_vals, self.ky_vals = kx_vals, ky_vals = (
-                np.linspace(-2*np.pi/a, 2*np.pi/a, N_k), np.linspace(-2*np.pi/a, 2*np.pi/a, N_k))
+                np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
             self.kx_grid, self.ky_grid = np.meshgrid(kx_vals, ky_vals)
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
@@ -110,26 +112,33 @@ class Geometry:
             #         self.k_path.append(k)
             # self.k_path = np.array(self.k_path)
     
-    def get_bulk_data(self):
+    def get_bulk_idx(self):
         a = self.lattice_constant
         bulk_sublattices = [0]
         sites = self.sites
-        C = self.connectivity_matrix
         x_max = max(sites[:, 0])
         y_max = max(sites[:, 1])
-        bulk_x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1 * a))[0]
-        bulk_y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1 * a))[0]
-        bulk_idx_candidates   = np.intersect1d(bulk_x_idxs, bulk_y_idxs)
-        chosen_bulk = [c for c in bulk_idx_candidates if self.sublattice_label[c] in bulk_sublattices]
+        bulk_x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
+        bulk_y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
+        bulk_idx_candidates = np.intersect1d(bulk_x_idxs, bulk_y_idxs)
+        chosen_bulk = [c for c in bulk_idx_candidates if self.sublattice_label_idxs[c] in bulk_sublattices]
         if not chosen_bulk:
             raise ValueError(f"No site found near the center in sublattices = {bulk_sublattices}!")
-        bulk_idx = bulk_idx = chosen_bulk[0]
-        neighboursA = np.where(C[bulk_idx, :] == 1)[0]
-        neighbours_idx = [n for n in neighboursA if self.sublattice_label[n] in self.distinct_labels]
-        dr_list = [sites[n] - sites[bulk_idx] for n in neighbours_idx]
-        return bulk_idx, neighbours_idx, dr_list
+        bulk_idx = chosen_bulk[0]
+        return bulk_idx
 
-    def get_edge_data(self):
+    def get_neighbours_data(self, bulk_idx):
+        C = self.connectivity_matrix
+        neighbours_idx = np.where(C[bulk_idx, :] == 1)[0]
+        return neighbours_idx
+
+    def get_dr(self, bulk_idx, neighbour_idxs, type="list"):
+        if type == "list":
+            return [self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs]
+        elif type == "dict":
+            return {n: self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs}
+
+    def get_edge_idx(self):
         # TODO: similar process to bulk but for the continuous edges
         return
 
@@ -141,7 +150,6 @@ class Geometry:
             cos_theta = dr / bond_length
             cos_theta_list.append(cos_theta)
         return np.array(cos_theta_list)
-
 
     def plot_lattice(self, ax=None):
         """
@@ -157,9 +165,9 @@ class Geometry:
         """
         if self.n_dim != 2:
             raise ValueError("plot_geometry is designed for 2D lattices (n_dim=2).")
-        sites = self.sites                    # shape (N, 2)
-        sublat_full = self.sublattice_label   # shape (N,)
-        C = self.connectivity_matrix          # shape (N, N)
+        sites = self.sites                         # shape (N, 2)
+        sublat_full = self.sublattice_label_idxs   # shape (N,)
+        C = self.connectivity_matrix               # shape (N, N)
         N = len(sites)
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
