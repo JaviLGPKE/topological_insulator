@@ -31,7 +31,7 @@ class Geometry:
         self._build_lattice(size, parser)
         self._set_connectivity(parser)
         self._build_brillouine_zone(size, N_k)
-        print(f"Geometry Completed.")
+        print(f"Geometry - Done.")
 
     def _build_lattice(self, size, parser):
         self.lattice_constant = a = parser.lattice_constant.value
