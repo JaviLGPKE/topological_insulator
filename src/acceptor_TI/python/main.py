@@ -18,20 +18,20 @@ class Problem:
         self.geometry = Geometry(model_options=model_options, cell_parser=self.cell_parser)
         self.geometry.build_lattice(size, N_k)
         # Tight-Binding
-        self.tight_binding = TightBinding(model_options=model_options)
-        self.tight_binding.setup(
-            cell_parser=self.cell_parser, 
-            geometry=self.geometry
-        )
+        self.tight_binding = TightBinding(model_options=model_options, cell_parser=self.cell_parser)
+        self.tight_binding.build_hamiltonian(geometry=self.geometry)
     
-    def run(self):
-        self.tight_binding.eigenvalues()
+    def run(self, acceptor:bool = False, type="analytical_bulk"):
+        if acceptor:
+            # self.geometry.update_geometry() # TODO: implement through cell_parser
+            ValueError("Acceptor case not implemented!")
+        self.tight_binding.solve_eigenvalues(self.geometry, acceptor, type)
     
     def plot(self, type="lattice"):
         if type == "lattice":
             self.geometry.plot_lattice()
-        elif type == "dispersion":
-            self.tight_binding.plot_dispersion(self.geometry)
+        elif type == "analytical_dispersion":
+            self.tight_binding.plot_analytical_dispersion(self.geometry)
         # elif type == "band_structure":
         #     self.tight_binding.plot_band_structure(self.geometry)
             
