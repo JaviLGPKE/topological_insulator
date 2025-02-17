@@ -13,7 +13,7 @@ hopping_dict = problem.cell_parser.eigenvalues.nn_hopping.value
 
 problem.setup(
     size = 10,
-    N_k = 30, 
+    N_k = 500, 
 )
 
 problem.run(

@@ -75,13 +75,12 @@ class TightBinding:
                 if idx_j in idx_map:
                     j = idx_map[idx_j]
                     sublattice_connectivity[i, j] = 1
-                    sublattice_connectivity[j, i] = 1 # Hermicity
-                    j = idx_map[idx_j]
+                    sublattice_connectivity[j, i] = 1 # h.c
                     col_slice = slice(j * N_projections, (j + 1) * N_projections)
                     H_ij = sublattice_dict["hopping_dict"][idx_j]
                     H_ij = sublattice_dict["hopping_dict"][idx_j]
                     H[row_slice, col_slice] = H_ij
-                    H[col_slice, row_slice] = H_ij.conj().T # Hermicity
+                    H[col_slice, row_slice] = H_ij.conj().T # h.c
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"Hamiltonian - Done.")
@@ -89,7 +88,7 @@ class TightBinding:
     def _sublattice_data(self, geometry:Geometry):
         n_sub = geometry.n_sublattices
         bulk_idx, neighbour_idxs = self._shared(geometry)
-        sublattice_idxs = [bulk_idx]
+        self.sublattice_idxs = sublattice_idxs = [bulk_idx]
         sublattice_idxs.extend(
             [idx for i, idx in enumerate(neighbour_idxs) if i < (n_sub -1)]
         )
@@ -295,38 +294,38 @@ class TightBinding:
         return perf_counter() - start
 
     def _solve_eigenvalues(self, H, tol = 1e-12):
-        H = self.H
         E, U = np.linalg.eigh(H)
         H_diag = U.conj().T @ H @ U
         self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         return E
     
     def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
-        H_k = self.H.copy()
-        data_dict = self.data_dict
         N_projections = self.n_orbitals * self.n_spins
-        idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
-        for sublattice_dict in data_dict.values():
-            idx_i = sublattice_dict["idx"]
-            if not (idx_i in idx_map):
-                continue
-            i = idx_map[idx_i]
-            row_slice = slice(i * N_projections, (i + 1) * N_projections)
-            for idx_j in sublattice_dict["neighbour_idxs"]:
-                if idx_j in idx_map:
-                    j = idx_map[idx_j]
-                    col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                    r_ij = sublattice_dict["dr_dict"][idx_j]
-                    phase = np.exp(1j * np.dot(k, r_ij))
-                    H_k[row_slice, col_slice] *= phase
-                    H_k[col_slice, row_slice] = phase.conj().T # Hermicity
+        dims = len(self.sublattice_idxs) * N_projections
+        H_k = np.zeros(shape=(dims, dims), dtype=complex) 
+        for n, sublattice_dict in enumerate(self.data_dict.values()):
+            row_slice = slice(n * N_projections, (n+1) * N_projections)
+            for m, _ in enumerate(self.data_dict.values()):
+                col_slice = slice(m * N_projections, (m+1) * N_projections)
+                H_k_nm = 0
+                # Diagonal elements
+                if n==m:
+                    continue
+                # Off-diagonal elements
+                else:
+                    for idx in sublattice_dict["neighbour_idxs"]:
+                        r_ij = sublattice_dict["dr_dict"][idx]
+                        phase = 1 if idx in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
+                        H_k_nm += phase * sublattice_dict["hopping_dict"][idx]
+                H_k[row_slice, col_slice] = H_k_nm
+                H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
         return H_k
     
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))
         cmap = plt.get_cmap('coolwarm')
-        cmap.set_bad('white')
-        M_masked = np.ma.masked_where(M == 0, M)
+        # cmap.set_bad('white')
+        M_masked = M #np.ma.masked_where(M == 0, M)
         plt.subplot(1, 2, 1)
         plt.imshow(M_masked.real, cmap=cmap)
         plt.title('Real Part')
@@ -352,8 +351,12 @@ class TightBinding:
         fig = plt.figure(figsize=(10, 6))
         ax = fig.add_subplot(111, projection='3d')
         for band in range(n_bands):
+            E = E_3d[:, :, band]
+            if np.allclose(E, 0, rtol=1e-12):
+                # Ignore zero values
+                continue 
             ax.plot_surface(
-                KX, KY, E_3d[:, :, band],
+                KX, KY, E,
                 cmap='viridis',
                 alpha=0.6, 
                 edgecolor='none'
