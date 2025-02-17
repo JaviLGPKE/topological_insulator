@@ -2,6 +2,7 @@ import numpy as np
 from sympy.physics.quantum.cg import CG
 import re
 from matplotlib import pyplot as plt
+from time import perf_counter
 
 from ..cell_parser import CellParser
 from ..model_options import ModelOptions
@@ -55,24 +56,34 @@ class TightBinding:
         self.data_dict = data_dict = self._sublattice_data(geometry)
         idxs = [idx for i in data_dict.values() for idx in i["neighbour_idxs"]]
         self.unique_idxs = np.unique(np.array(idxs))
+        # Connectivity
+        N_subs = len(self.unique_idxs)
+        sublattice_connectivity = np.zeros(shape=(N_subs, N_subs))
+        # Hamiltonian
+        N_projections = self.n_orbitals * self.n_spins
+        N_sites = len(self.unique_idxs)
+        H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
+        # Build
         idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
-        # Real Space Hamiltonian
-        k = self.k_space
-        N = len(self.unique_idxs)
-        H = np.zeros(shape=(N, N))
         for sublattice_dict in data_dict.values():
             idx_i = sublattice_dict["idx"]
             if not (idx_i in idx_map):
-                # Check that the central index is in our mapping 
-                # (it may not be if it never appeared as a neighbour)
                 continue
             i = idx_map[idx_i]
+            row_slice = slice(i * N_projections, (i + 1) * N_projections)
             for idx_j in sublattice_dict["neighbour_idxs"]:
                 if idx_j in idx_map:
                     j = idx_map[idx_j]
-                    H[i, j] = 1
-                    H[j, i] = 1 # Hermicity
-        self.real_hamiltonian = H
+                    sublattice_connectivity[i, j] = 1
+                    sublattice_connectivity[j, i] = 1 # Hermicity
+                    j = idx_map[idx_j]
+                    col_slice = slice(j * N_projections, (j + 1) * N_projections)
+                    H_ij = sublattice_dict["hopping_dict"][idx_j]
+                    H_ij = sublattice_dict["hopping_dict"][idx_j]
+                    H[row_slice, col_slice] = H_ij
+                    H[col_slice, row_slice] = H_ij.conj().T # Hermicity
+        self.sublattice_connectivity = sublattice_connectivity
+        self.H = H
         print(f"Hamiltonian - Done.")
     
     def _sublattice_data(self, geometry:Geometry):
@@ -202,6 +213,7 @@ class TightBinding:
                         hopping_key = f"|{bra_orb}><{ket_orb}|"
                         t_hop = state_hoppings[hopping_key]
                         t_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * t_hop
+                # TODO: add spin-orbit coupling hopping "delta"
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = t_nm
                 H_ij[n, m] = t_nm
         return H_ij, coupled_states
@@ -261,62 +273,54 @@ class TightBinding:
         else:
             raise ValueError("State string format is incorrect.")
 
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, type:str):
-        # TODO: perform j, m_j angular momentum coupled basis 
-        # transformation using Clebsch-Gordan coefficients
-        if type == "bulk":
-            self._solve_eigenvalues(geometry, acceptor)
-            # self._fourier_transform()
+    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+        tol = 1e-12 * geometry.lattice_constant
+        print(f"Calculating eigenvalues...")
+        start = perf_counter()
+        if H_type == "real_space":
+            H = self.H
+            self.E = self._solve_eigenvalues(H, tol)
+        elif H_type == "reciprocal_space":
+            E_k_dict = {}
+            for k_x in geometry.kx_vals:
+                for k_y in geometry.ky_vals:
+                    k = np.array([k_x, k_y])
+                    H_k = self._fourier_transform(k)
+                    E_k = self._solve_eigenvalues(H_k)
+                    E_k_dict[f"[{k_x},{k_y}]"] = E_k
+            self.E_k_dict = E_k_dict
         else:
             ValueError("Not Implemented!")
+        print(f"Eigenvalues - Done.")
+        return perf_counter() - start
 
-    def _solve_eigenvalues(self, geometry: Geometry, acceptor: bool):
-        print(f"Calculating eigenvalues...")
+    def _solve_eigenvalues(self, H, tol = 1e-12):
+        H = self.H
+        E, U = np.linalg.eigh(H)
+        H_diag = U.conj().T @ H @ U
+        self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
+        return E
+    
+    def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
+        H_k = self.H.copy()
+        data_dict = self.data_dict
         N_projections = self.n_orbitals * self.n_spins
-        N_sites = len(self.unique_idxs)
-        H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
-        # Populate Hamiltonian 
-        idx_map = {global_idx: pos for pos, global_idx in enumerate(self.unique_idxs)}
-        for label, sublattice_dict in self.data_dict.items():
+        idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
+        for sublattice_dict in data_dict.values():
             idx_i = sublattice_dict["idx"]
+            if not (idx_i in idx_map):
+                continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             for idx_j in sublattice_dict["neighbour_idxs"]:
-                j = idx_map[idx_j]
-                col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                # Assign the hopping 4x4 matrix block to the Hamiltonian
-                H_ij = sublattice_dict["hopping_dict"][idx_j]
-                H_ij = sublattice_dict["hopping_dict"][idx_j]
-                H[row_slice, col_slice] = H_ij
-                H[col_slice, row_slice] = H_ij.conj().T # Hermicity
-        self.E, U = np.linalg.eigh(H)
-        H_diag = U.conj().T @ H @ U
-        tol = 1e-12 * geometry.lattice_constant
-        self.H_diag, self.H = np.where(np.abs(H_diag) < tol, 0, H_diag), H
-    
-    def _fourier_transform(self):
-        # TODO: perform fourier transform
-        # E = self.E
-        # n = len(E) / self.unique_idxs
-        # E_k = []
-        print(f"Calculating eigenvalues...")
-        embed()
-        # k = self.k_space
-        # f_k = 0
-        # n_alpha = self.n_orbitals
-        # idx_map = {global_idx: pos for pos, global_idx in enumerate(self.unique_idxs)}
-        # for label, sublattice_dict in self.data_dict.items():
-        #     idx_i = sublattice_dict["idx"]
-        #     i = idx_map[idx_i]
-        #     row_slice = slice(i * n_alpha, (i + 1) * n_alpha)
-        #     for idx_j in sublattice_dict["neighbour_idxs"]:
-        #         j = idx_map[idx_j]
-        #         col_slice = slice(j * n_alpha, (j + 1) * n_alpha)
-        #         # Fourier Transform
-        #         r_ij = sublattice_dict["dr_dict"][idx_j]
-        # self.E_plus_map = np.abs(f_k)
-        # self.E_minus_map = -1 * np.abs(f_k)
-        print(f"Eigenvalues calculated.")
+                if idx_j in idx_map:
+                    j = idx_map[idx_j]
+                    col_slice = slice(j * N_projections, (j + 1) * N_projections)
+                    r_ij = sublattice_dict["dr_dict"][idx_j]
+                    phase = np.exp(1j * np.dot(k, r_ij))
+                    H_k[row_slice, col_slice] *= phase
+                    H_k[col_slice, row_slice] = phase.conj().T # Hermicity
+        return H_k
     
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))
@@ -333,33 +337,31 @@ class TightBinding:
         plt.colorbar()
         plt.show()
 
-    def plot_analytical_dispersion(self, geometry: Geometry):
-        assert(self.model_options.dispersion)
-        print(f"Plotting dispersion...")
-        kx_matrix = np.zeros_like(geometry.kx_grid)
-        ky_matrix = np.zeros_like(geometry.ky_grid)
-        # Convert grid (u,v) → (kx, ky)
-        for i in range(geometry.kx_grid.shape[0]):
-            for j in range(geometry.ky_grid.shape[1]):
-                u = geometry.kx_grid[i, j]
-                v = geometry.ky_grid[i, j]
-                kxy = u*geometry.b1 + v*geometry.b2
-                kx_matrix[i, j] = kxy[0]
-                ky_matrix[i, j] = kxy[1]
-        # Plot 3D surface
-        fig = plt.figure(figsize=(10,6))
+    def plot_dispersion(self, geometry: Geometry):
+        kx, ky = geometry.kx_vals, geometry.ky_vals
+        n_kx, n_ky = len(kx), len(ky)
+        E_k_list = []
+        for k_x in kx:
+            for k_y in ky:
+                key = f"[{k_x},{k_y}]"
+                E_k_list.append(self.E_k_dict[key])
+        E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
+        E_3d = E_stacked.reshape(n_kx, n_ky, -1)
+        n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
+        KX, KY = np.meshgrid(kx, ky, indexing='ij') 
+        fig = plt.figure(figsize=(10, 6))
         ax = fig.add_subplot(111, projection='3d')
-        surf1 = ax.plot_surface(kx_matrix, ky_matrix, self.E_plus_map, cmap='coolwarm', alpha=0.8)
-        surf2 = ax.plot_surface(kx_matrix, ky_matrix, self.E_minus_map, cmap='coolwarm', alpha=0.8)
-        # Overlay high-symmetry path
-        # ax.plot(geometry.k_path[:,0], geometry.k_path[:,1], self.Eplus_band, 
-        #         color='black', linewidth=2, label='Γ→K→M→Γ')
-        # ax.plot(geometry.k_path[:,0], geometry.k_path[:,1], self.Eminus_band, 
-        #         color='black', linewidth=2)
-        ax.set_xlabel("k_x")
-        ax.set_ylabel("k_y")
-        ax.set_zlabel("E (eV)")
-        # plt.legend()
+        for band in range(n_bands):
+            ax.plot_surface(
+                KX, KY, E_3d[:, :, band],
+                cmap='viridis',
+                alpha=0.6, 
+                edgecolor='none'
+            )
+        ax.set_xlabel(r'$k_x$', fontsize=12)
+        ax.set_ylabel(r'$k_y$', fontsize=12)
+        ax.set_zlabel(r'$E$', fontsize=12)
+        plt.title('3D Band Structure', fontsize=14)
         plt.show()
     
     def plot_band_structure(self, geometry: Geometry):

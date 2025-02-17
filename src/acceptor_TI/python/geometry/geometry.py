@@ -92,10 +92,9 @@ class Geometry:
         self.b1 = b1 = (2*np.pi / area) * np.array([a2[1], -a2[0]])
         self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1], a1[0]])
         # Generate grid for 3D dispersion plot
-        if self.model_options.dispersion:
-            self.kx_vals, self.ky_vals = kx_vals, ky_vals = (
-                np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
-            self.kx_grid, self.ky_grid = np.meshgrid(kx_vals, ky_vals)
+        self.kx_vals, self.ky_vals = kx_vals, ky_vals = (
+            np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
+        self.kx_grid, self.ky_grid = np.meshgrid(kx_vals, ky_vals)
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
             # gamma = np.array([0.0, 0.0])
