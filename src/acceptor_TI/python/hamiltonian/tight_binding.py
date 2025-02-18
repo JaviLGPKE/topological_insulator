@@ -98,7 +98,7 @@ class TightBinding:
             neighbour_idxs = geometry.get_neighbours_data(idx)
             dr_list = geometry.get_dr(idx, neighbour_idxs, type="list")
             directional_cosines = geometry.bond_orientation(dr_list)
-            H_ij_dict, coupled_states_dict = self.get_neighbour_hoppings(
+            H_ij_dict, coupled_states_dict = self.get_hopping_info(
                 neighbour_idxs, directional_cosines)
             data_dict[sub_label] = {
                 "idx": idx,
@@ -111,7 +111,7 @@ class TightBinding:
         assert(list(data_dict.keys()) == geometry.sublattice_labels[:n_sub])
         return data_dict
     
-    def get_neighbour_hoppings(self, neighbour_idxs, directional_cosines):
+    def get_hopping_info(self, neighbour_idxs, directional_cosines):
         H_i = {}
         coupled_states_i = {}
         for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
@@ -298,18 +298,18 @@ class TightBinding:
         H_diag = U.conj().T @ H @ U
         self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         return E
-    
+
     def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
         N_projections = self.n_orbitals * self.n_spins
         dims = len(self.sublattice_idxs) * N_projections
         H_k = np.zeros(shape=(dims, dims), dtype=complex) 
         for n, sublattice_dict in enumerate(self.data_dict.values()):
-            row_slice = slice(n * N_projections, (n+1) * N_projections)
+            row_slice = slice(n * N_projections, (n + 1) * N_projections)
             for m, _ in enumerate(self.data_dict.values()):
-                col_slice = slice(m * N_projections, (m+1) * N_projections)
+                col_slice = slice(m * N_projections, (m + 1) * N_projections)
                 H_k_nm = 0
                 # Diagonal elements
-                if n==m:
+                if n == m:
                     continue
                 # Off-diagonal elements
                 else:
@@ -324,8 +324,8 @@ class TightBinding:
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))
         cmap = plt.get_cmap('coolwarm')
-        # cmap.set_bad('white')
-        M_masked = M #np.ma.masked_where(M == 0, M)
+        cmap.set_bad('white')
+        M_masked = np.ma.masked_where(M == 0, M)
         plt.subplot(1, 2, 1)
         plt.imshow(M_masked.real, cmap=cmap)
         plt.title('Real Part')
