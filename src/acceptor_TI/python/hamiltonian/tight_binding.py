@@ -8,8 +8,6 @@ from ..cell_parser import CellParser
 from ..model_options import ModelOptions
 from ..geometry import Geometry
 
-from IPython import embed
-
 class TightBinding:
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
@@ -29,7 +27,7 @@ class TightBinding:
         self._clebsch_gordan()
 
     def _clebsch_gordan(self):
-        self.CB_state_key = {}
+        self.CG_coefficients = {}
         j_2 = 1/2
         m_2 = np.arange(-j_2, j_2 + 1, 1)
         for j_1 in [0, 1]:          
@@ -43,7 +41,7 @@ class TightBinding:
                         state = f"|{j_1},{m_l};{j_2},{m_s}>"
                         if (m_l + m_s) != m_j:
                             continue
-                        self.CB_state_key[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
+                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
 
     def _shared(self, geometry: Geometry):
         self.k_space = np.array([geometry.kx_grid, geometry.ky_grid])
@@ -53,8 +51,8 @@ class TightBinding:
     
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building Hamiltonian...")
-        self.data_dict = data_dict = self._sublattice_data(geometry)
-        idxs = [idx for i in data_dict.values() for idx in i["neighbour_idxs"]]
+        self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry)
+        idxs = [idx for i in sublattice_data_dict.values() for idx in i["neighbour_idxs"]]
         self.unique_idxs = np.unique(np.array(idxs))
         # Connectivity
         N_subs = len(self.unique_idxs)
@@ -65,7 +63,7 @@ class TightBinding:
         H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
-        for sublattice_dict in data_dict.values():
+        for sublattice_dict in sublattice_data_dict.values():
             idx_i = sublattice_dict["idx"]
             if not (idx_i in idx_map):
                 continue
@@ -92,7 +90,7 @@ class TightBinding:
         sublattice_idxs.extend(
             [idx for i, idx in enumerate(neighbour_idxs) if i < (n_sub -1)]
         )
-        data_dict = {}
+        sublattice_data_dict = {}
         for i, idx in enumerate(sublattice_idxs):
             sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
             neighbour_idxs = geometry.get_neighbours_data(idx)
@@ -100,7 +98,7 @@ class TightBinding:
             directional_cosines = geometry.bond_orientation(dr_list)
             H_ij_dict, coupled_states_dict = self.get_hopping_info(
                 neighbour_idxs, directional_cosines)
-            data_dict[sub_label] = {
+            sublattice_data_dict[sub_label] = {
                 "idx": idx,
                 "neighbour_idxs": neighbour_idxs,
                 "dr_dict": geometry.get_dr(idx, neighbour_idxs, type="dict"),
@@ -108,8 +106,8 @@ class TightBinding:
                 "coupled_states_dict": coupled_states_dict
             }
         # Check we are considering unique sublattices
-        assert(list(data_dict.keys()) == geometry.sublattice_labels[:n_sub])
-        return data_dict
+        assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:n_sub])
+        return sublattice_data_dict
     
     def get_hopping_info(self, neighbour_idxs, directional_cosines):
         H_i = {}
@@ -182,7 +180,7 @@ class TightBinding:
         H_ij : np.ndarray
             The Hamiltonian expressed in the total-angular-momentum coupled basis |j, m_j>.
         """
-        dim = len(self.CB_state_key.keys())
+        dim = len(self.CG_coefficients.keys())
         H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
         # i, j = 0, 0 would be interpreted as the |j=1/2, m=-1/2><j=1/2, m=-1/2| entry
         # i, j = 0, 1 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-3/2| entry
@@ -190,14 +188,14 @@ class TightBinding:
         # NOTE: Transitions to opposite spin-states are not allowed
         # NOTE: Assumed t_{ss}^{↑} == t_{ss}^{↓}
         coupled_states = {}
-        for n, (bra_key, cg_bra) in enumerate(self.CB_state_key.items()):
+        for n, (bra_key, cg_bra) in enumerate(self.CG_coefficients.items()):
             bra_l   = self.get_quantum_number(bra_key, pos=0)
             bra_m_l = self.get_quantum_number(bra_key, pos=1)
             bra_m_s = self.get_quantum_number(bra_key, pos=3)
             bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
             j_n = bra_l + 1/2
             m_j_n = bra_m_l + bra_m_s
-            for m, (ket_key, cg_ket) in enumerate(self.CB_state_key.items()):
+            for m, (ket_key, cg_ket) in enumerate(self.CG_coefficients.items()):
                 ket_l   = self.get_quantum_number(ket_key, pos=0)
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
@@ -303,9 +301,9 @@ class TightBinding:
         N_projections = self.n_orbitals * self.n_spins
         dims = len(self.sublattice_idxs) * N_projections
         H_k = np.zeros(shape=(dims, dims), dtype=complex) 
-        for n, sublattice_dict in enumerate(self.data_dict.values()):
+        for n, sublattice_dict in enumerate(self.sublattice_data_dict.values()):
             row_slice = slice(n * N_projections, (n + 1) * N_projections)
-            for m, _ in enumerate(self.data_dict.values()):
+            for m, _ in enumerate(self.sublattice_data_dict.values()):
                 col_slice = slice(m * N_projections, (m + 1) * N_projections)
                 H_k_nm = 0
                 # Diagonal elements
@@ -368,34 +366,35 @@ class TightBinding:
         plt.show()
     
     def plot_band_structure(self, geometry: Geometry):
-        assert(self.model_options.band_structure)
+        # TODO:
+        # assert(self.model_options.band_structure)
         print("Plotting band structure...")
-        N_k = geometry.N_k
-        k_vec = geometry.k_path
-        Eplus = self.E_plus_band  
-        Eminus = self.E_minus_band 
+        # N_k = geometry.N_k
+        # k_vec = geometry.k_path
+        # Eplus = self.E_plus_band  
+        # Eminus = self.E_minus_band 
 
-        # Create a parametric x-axis for the k-path (Γ → K → M → Γ)
-        k_path_length = np.arange(len(k_vec))
-        plt.figure(figsize=(10, 6))
-        plt.plot(k_path_length, Eplus, label='E+', color='blue')
-        plt.plot(k_path_length, Eminus, label='E-', color='red')
+        # # Create a parametric x-axis for the k-path (Γ → K → M → Γ)
+        # k_path_length = np.arange(len(k_vec))
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(k_path_length, Eplus, label='E+', color='blue')
+        # plt.plot(k_path_length, Eminus, label='E-', color='red')
 
-        # Positions must be scalars
-        positions = [
-            0, 
-            N_k**2, 
-            2 * N_k**2, 
-            3 * N_k**2 - 1
-        ]
-        plt.xticks(
-            positions,
-            ['Γ', 'K', 'M', 'Γ'],
-            fontsize=12
-        )
+        # # Positions must be scalars
+        # positions = [
+        #     0, 
+        #     N_k**2, 
+        #     2 * N_k**2, 
+        #     3 * N_k**2 - 1
+        # ]
+        # plt.xticks(
+        #     positions,
+        #     ['Γ', 'K', 'M', 'Γ'],
+        #     fontsize=12
+        # )
 
-        plt.xlabel('High-Symmetry Path')
-        plt.ylabel('Energy (eV)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # plt.xlabel('High-Symmetry Path')
+        # plt.ylabel('Energy (eV)')
+        # plt.legend()
+        # plt.grid(True)
+        # plt.show()
