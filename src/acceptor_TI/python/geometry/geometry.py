@@ -52,7 +52,7 @@ class Geometry:
         self.sites = np.array(sites)
         self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
         self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
-        
+
     def _set_connectivity(self, parser, tol=1e-12) -> None:
         """
         Sets the connectivity matrix based on whether the distance between two sites
@@ -110,7 +110,7 @@ class Geometry:
             #         k = frac_coords[0]*b1 + frac_coords[1]*b2
             #         self.k_path.append(k)
             # self.k_path = np.array(self.k_path)
-    
+
     def get_bulk_idx(self):
         a = self.lattice_constant
         bulk_sublattices = [0]

@@ -14,17 +14,18 @@ class TightBinding:
     spin-orbit coupling interaction and Coulomb repulsive interaction terms.
     """
     def __init__(self, model_options:ModelOptions, cell_parser: CellParser):
+        # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
-        self.available_terms = [
-            "nearest_neighbour_hopping", "spin_orbit_interaction", "coulomb_interaction"
-        ]
+        # Orbitals
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
         self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
         self.n_spins = 2
         self.n_orbitals = 4
         self._clebsch_gordan()
+        # Sublattice
+        self.sublattice_data_dict = {}
 
     def _clebsch_gordan(self):
         self.CG_coefficients = {}
@@ -48,7 +49,7 @@ class TightBinding:
         bulk_idx = geometry.get_bulk_idx()
         neighbours_idx = geometry.get_neighbours_data(bulk_idx)
         return bulk_idx, neighbours_idx
-    
+
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building Hamiltonian...")
         self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry)
@@ -82,7 +83,7 @@ class TightBinding:
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"Hamiltonian - Done.")
-    
+
     def _sublattice_data(self, geometry:Geometry):
         n_sub = geometry.n_sublattices
         bulk_idx, neighbour_idxs = self._shared(geometry)
@@ -108,7 +109,7 @@ class TightBinding:
         # Check we are considering unique sublattices
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:n_sub])
         return sublattice_data_dict
-    
+
     def get_hopping_info(self, neighbour_idxs, directional_cosines):
         H_i = {}
         coupled_states_i = {}
@@ -119,7 +120,7 @@ class TightBinding:
             H_i[j] = H_ij
             coupled_states_i[j] = coupled_states
         return H_i, coupled_states_i
-        
+
     def _slater_koster(self, cosines):
         nn_parser = self.cell_parser.eigenvalues.nn_hopping.value
         t_ss = nn_parser["t_ss_sigma"]
@@ -164,7 +165,7 @@ class TightBinding:
                 else:
                     state_hoppings[key] = 0
         return state_hoppings
-        
+
     def _get_coupled_hopping(self, state_hoppings:dict):
         """
         Transforms the 8x8 spin-orbit Hamiltonian (s + p orbitals with spin-1/2)
@@ -214,7 +215,7 @@ class TightBinding:
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = t_nm
                 H_ij[n, m] = t_nm
         return H_ij, coupled_states
-                
+
     def l_to_orbitals(self, l, m_l):
         """
         Convert an angular momentum state |l, m_l> into a linear combination
@@ -318,7 +319,7 @@ class TightBinding:
                 H_k[row_slice, col_slice] = H_k_nm
                 H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
         return H_k
-    
+
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))
         cmap = plt.get_cmap('coolwarm')
@@ -364,7 +365,7 @@ class TightBinding:
         ax.set_zlabel(r'$E$', fontsize=12)
         plt.title('3D Band Structure', fontsize=14)
         plt.show()
-    
+
     def plot_band_structure(self, geometry: Geometry):
         # TODO:
         # assert(self.model_options.band_structure)

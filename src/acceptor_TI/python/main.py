@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from .model_options import ModelOptions
 from .cell_parser import CellParser
 from .geometry import Geometry
-from .hamiltonian import TightBinding
+from .hamiltonian import TightBinding, WaveFunction
 
 class Problem:
     def __init__(self, data_path:str, file_name:str, save_path=None):
@@ -20,6 +20,8 @@ class Problem:
         # Tight-Binding
         self.tight_binding = TightBinding(model_options=model_options, cell_parser=self.cell_parser)
         self.tight_binding.build_hamiltonian(geometry=self.geometry)
+        # WaveFunction
+        self.wavefunction = WaveFunction(cell_parser=self.cell_parser)
     
     def run(self, acceptor:bool = False, H_type="real_space"):
         if acceptor:
