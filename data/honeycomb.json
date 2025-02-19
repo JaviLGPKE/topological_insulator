@@ -4,11 +4,12 @@
         "dimensions": {"value": 2}
     },
     "eigenvalues":{
-        "on_site": {"value": {
-            "E_s":0,
-            "E_x":0,
-            "E_y":0,
-            "E_z":0
+        "on_site": {
+            "value": {
+                "E_s":0,
+                "E_x":0,
+                "E_y":0,
+                "E_z":0
         }, "type":"dict", "constant": true,"unit": "eV"},
         "nn_hopping": {
             "value": {
@@ -17,9 +18,15 @@
                 "t_pp_sigma": 0,
                 "t_pp_pi": 0
             }, "type":"dict", "constant": true,"unit": "eV"},
-        "interaction_strength": {"value": {
-            "V_0": 0,
-            "V_2": 0
+        "interaction_strength": {
+            "value": {
+                "V_0": 0,
+                "V_2": 0
+        }, "type":"dict", "constant": true,"unit": "eV"},
+        "spin_orbit_coupling_strength":{
+            "value": {
+                "d_heavy":0,
+                "d_light":0
         }, "type":"dict", "constant": true,"unit": "eV"}
     },
     "geometry":{
