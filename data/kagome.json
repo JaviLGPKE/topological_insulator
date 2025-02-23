@@ -20,6 +20,11 @@
         "interaction_strength": {"value": {
             "V_0": 0,
             "V_2": 0
+        }, "type":"dict", "constant": true,"unit": "eV"},
+        "spin_orbit_coupling_strength":{
+            "value": {
+                "d_heavy":0,
+                "d_light":0
         }, "type":"dict", "constant": true,"unit": "eV"}
     },
   "geometry": {
