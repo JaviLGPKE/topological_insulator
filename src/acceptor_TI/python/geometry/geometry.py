@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser
 
+from IPython import embed
 class Geometry:
     def __init__(self, model_options:ModelOptions, cell_parser:CellParser):
         self.model_options = model_options
@@ -111,24 +112,55 @@ class Geometry:
             #         self.k_path.append(k)
             # self.k_path = np.array(self.k_path)
 
-    def get_bulk_idx(self):
+    def get_location_idx(self, location:str):
         a = self.lattice_constant
-        bulk_sublattices = [0]
+        sublattices = [0]
         sites = self.sites
         x_max = max(sites[:, 0])
         y_max = max(sites[:, 1])
-        bulk_x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
-        bulk_y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
-        bulk_idx_candidates = np.intersect1d(bulk_x_idxs, bulk_y_idxs)
-        chosen_bulk = [c for c in bulk_idx_candidates if self.sublattice_label_idxs[c] in bulk_sublattices]
-        if not chosen_bulk:
-            raise ValueError(f"No site found near the center in sublattices = {bulk_sublattices}!")
-        bulk_idx = chosen_bulk[0]
-        return bulk_idx
+        if location == "bulk":
+            x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
+            y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
+        elif location == "edge":
+            x_idxs = np.where(np.isclose(sites[:, 0], 3*x_max/4, rtol=1e-1*a))[0]
+            y_min = min(sites[x_idxs, 1])
+            y_idxs = np.where(np.isclose(sites[:, 1], y_min, rtol=1e-1*a))[0]
+        else: 
+            raise ValueError(f"Location '{location}' not available")
+        idx_candidates = np.intersect1d(x_idxs, y_idxs)
+        chosen_idxs = [c for c in idx_candidates if self.sublattice_label_idxs[c] in sublattices]
+        return chosen_idxs[0]
 
-    def get_neighbours_data(self, bulk_idx):
+    def get_sublattice_idxs(self, location:str):
+        chosen_idx = self.get_location_idx(location)
+        setattr(self, f"{location}_idx", chosen_idx)
+        neighbour_idxs = self.get_neighbour_idxs(chosen_idx)
+        sublattice_idxs = [chosen_idx]
+        a = self.lattice_constant
+        if location == "bulk":
+            sublattice_idxs.extend(
+                [idx for i, idx in enumerate(neighbour_idxs) if i < (self.n_sublattices -1)]
+            )
+        elif location == "edge":
+            # TODO: Check if this works for all scenarios
+            sites = self.sites
+            x_max = np.max(sites[:, 0])
+            target_x = 3 * x_max / 4
+            y_min = sites[chosen_idx, 1]
+            edge_neighbours = [
+                idx for idx in neighbour_idxs
+                if (
+                    # np.isclose(sites[idx, 0], target_x, rtol=0.2 * a)
+                    # and np.isclose(sites[idx, 1], y_min, atol=1e-3)
+                    sites[idx, 1] <= y_min
+                )
+            ]
+            sublattice_idxs.extend(edge_neighbours[:self.n_sublattices -1])
+        return sublattice_idxs
+
+    def get_neighbour_idxs(self, idx):
         C = self.connectivity_matrix
-        neighbours_idx = np.where(C[bulk_idx, :] == 1)[0]
+        neighbours_idx = np.where(C[idx, :] == 1)[0]
         return neighbours_idx
 
     def get_dr(self, bulk_idx, neighbour_idxs, type="list"):
@@ -136,10 +168,6 @@ class Geometry:
             return [self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs]
         elif type == "dict":
             return {n: self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs}
-
-    def get_edge_idx(self):
-        # TODO: similar process to bulk but for the continuous edges
-        return
 
     def bond_orientation(self, dr_list):
         cos_theta_list = []

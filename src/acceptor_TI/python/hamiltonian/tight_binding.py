@@ -8,6 +8,8 @@ from ..cell_parser import CellParser
 from ..model_options import ModelOptions
 from ..geometry import Geometry
 
+from IPython import embed
+
 class TightBinding:
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
@@ -44,15 +46,10 @@ class TightBinding:
                             continue
                         self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
 
-    def _shared(self, geometry: Geometry):
-        self.k_space = np.array([geometry.kx_grid, geometry.ky_grid])
-        bulk_idx = geometry.get_bulk_idx()
-        neighbours_idx = geometry.get_neighbours_data(bulk_idx)
-        return bulk_idx, neighbours_idx
-
-    def build_hamiltonian(self, geometry:Geometry):
+    def build_hamiltonian(self, geometry:Geometry, location:str):
+        self.location = location
         print(f"Building Hamiltonian...")
-        self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry)
+        self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry, location)
         idxs = [idx for i in sublattice_data_dict.values() for idx in i["neighbour_idxs"]]
         self.unique_idxs = np.unique(np.array(idxs))
         # Connectivity
@@ -84,17 +81,14 @@ class TightBinding:
         self.H = H
         print(f"Hamiltonian - Done.")
 
-    def _sublattice_data(self, geometry:Geometry):
-        n_sub = geometry.n_sublattices
-        bulk_idx, neighbour_idxs = self._shared(geometry)
-        self.sublattice_idxs = sublattice_idxs = [bulk_idx]
-        sublattice_idxs.extend(
-            [idx for i, idx in enumerate(neighbour_idxs) if i < (n_sub -1)]
-        )
+    def _sublattice_data(self, geometry:Geometry, location:str):
+        self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs(location)
+        # if location=="edge":
+        #     embed()
         sublattice_data_dict = {}
         for i, idx in enumerate(sublattice_idxs):
             sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
-            neighbour_idxs = geometry.get_neighbours_data(idx)
+            neighbour_idxs = geometry.get_neighbour_idxs(idx)
             dr_list = geometry.get_dr(idx, neighbour_idxs, type="list")
             directional_cosines = geometry.bond_orientation(dr_list)
             H_ij_dict, coupled_states_dict = self.get_hopping_info(
@@ -107,7 +101,7 @@ class TightBinding:
                 "coupled_states_dict": coupled_states_dict
             }
         # Check we are considering unique sublattices
-        assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:n_sub])
+        assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
 
     def get_hopping_info(self, neighbour_idxs, directional_cosines):
