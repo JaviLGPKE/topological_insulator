@@ -21,4 +21,4 @@ problem.run(
     H_type="reciprocal_space"
 )
 
-problem.plot(plot_type="dispersion")
+# problem.plot(plot_type="dispersion", location="bulk")

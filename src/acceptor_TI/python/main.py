@@ -47,7 +47,7 @@ class Problem:
             ValueError("Acceptor case not implemented!")
         for location in self.Hamiltonian.keys():
             tight_binding:TightBinding = self.Hamiltonian[location]["tight_binding"]
-            tight_binding.solve_eigenvalues(self.geometry, acceptor, H_type)
+            tight_binding.solve_eigenvalues(self.geometry, acceptor, H_type, location)
     
     def plot(self, plot_type="lattice", location:str=None):
         if plot_type == "lattice":
