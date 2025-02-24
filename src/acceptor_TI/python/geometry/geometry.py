@@ -122,7 +122,7 @@ class Geometry:
             x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
             y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
         elif location == "edge":
-            x_idxs = np.where(np.isclose(sites[:, 0], 3*x_max/4, rtol=1e-1*a))[0]
+            x_idxs = np.where(np.isclose(sites[:, 0], 3*x_max/4, rtol=2e-1*a))[0]
             y_min = min(sites[x_idxs, 1])
             y_idxs = np.where(np.isclose(sites[:, 1], y_min, rtol=1e-1*a))[0]
         else: 
@@ -131,31 +131,52 @@ class Geometry:
         chosen_idxs = [c for c in idx_candidates if self.sublattice_label_idxs[c] in sublattices]
         return chosen_idxs[0]
 
-    def get_sublattice_idxs(self, location:str):
+    def get_sublattice_idxs(self, location: str):
+        # NOTE: must only consider unique sublattices that match
+        # within coordinate conditions
         chosen_idx = self.get_location_idx(location)
         setattr(self, f"{location}_idx", chosen_idx)
         neighbour_idxs = self.get_neighbour_idxs(chosen_idx)
         sublattice_idxs = [chosen_idx]
         a = self.lattice_constant
+
         if location == "bulk":
             sublattice_idxs.extend(
-                [idx for i, idx in enumerate(neighbour_idxs) if i < (self.n_sublattices -1)]
+                [idx for i, idx in enumerate(neighbour_idxs) if i < (self.n_sublattices - 1)]
             )
         elif location == "edge":
-            # TODO: Check if this works for all scenarios
+
+            def unique_labels(idxs):
+                return set(self.sublattice_label_idxs[i] for i in idxs)
+            
             sites = self.sites
-            x_max = np.max(sites[:, 0])
-            target_x = 3 * x_max / 4
             y_min = sites[chosen_idx, 1]
-            edge_neighbours = [
-                idx for idx in neighbour_idxs
-                if (
-                    # np.isclose(sites[idx, 0], target_x, rtol=0.2 * a)
-                    # and np.isclose(sites[idx, 1], y_min, atol=1e-3)
-                    sites[idx, 1] <= y_min
-                )
-            ]
-            sublattice_idxs.extend(edge_neighbours[:self.n_sublattices -1])
+            edge_candidates = [idx for idx in neighbour_idxs if sites[idx, 1] <= y_min]
+            non_edge_candidates = [idx for idx in neighbour_idxs if sites[idx, 1] > y_min]
+            num_needed = self.n_sublattices - 1
+            sublattice_idxs.extend(edge_candidates[:num_needed])
+            while len(unique_labels(sublattice_idxs)) < self.n_sublattices and non_edge_candidates:
+                current_labels = [self.sublattice_label_idxs[i] for i in sublattice_idxs]
+                freq = {}
+                for label in current_labels:
+                    freq[label] = freq.get(label, 0) + 1
+                duplicate_indices = [i for i, idx in enumerate(sublattice_idxs)
+                                    if freq[self.sublattice_label_idxs[idx]] > 1]
+                if not duplicate_indices:
+                    break
+                # Look for a non-edge candidate with missing label
+                swapped = False
+                for candidate in list(non_edge_candidates):
+                    candidate_label = self.sublattice_label_idxs[candidate]
+                    if candidate_label not in unique_labels(sublattice_idxs):
+                        sublattice_idxs[duplicate_indices[0]] = candidate
+                        non_edge_candidates.remove(candidate)
+                        swapped = True
+                        break
+                if not swapped:
+                    break
+        # Sort idxs according to label order
+        sublattice_idxs = sorted(sublattice_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
         return sublattice_idxs
 
     def get_neighbour_idxs(self, idx):

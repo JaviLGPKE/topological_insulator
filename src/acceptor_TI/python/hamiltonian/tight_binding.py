@@ -48,7 +48,7 @@ class TightBinding:
 
     def build_hamiltonian(self, geometry:Geometry, location:str):
         self.location = location
-        print(f"Building Hamiltonian...")
+        print(f"Building '{location}' Hamiltonian...")
         self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry, location)
         idxs = [idx for i in sublattice_data_dict.values() for idx in i["neighbour_idxs"]]
         self.unique_idxs = np.unique(np.array(idxs))
@@ -79,12 +79,10 @@ class TightBinding:
                     H[col_slice, row_slice] = H_ij.conj().T # h.c
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
-        print(f"Hamiltonian - Done.")
+        print(f"'{location}' Hamiltonian - Done.")
 
     def _sublattice_data(self, geometry:Geometry, location:str):
         self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs(location)
-        # if location=="edge":
-        #     embed()
         sublattice_data_dict = {}
         for i, idx in enumerate(sublattice_idxs):
             sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
@@ -265,9 +263,9 @@ class TightBinding:
         else:
             raise ValueError("State string format is incorrect.")
 
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str, location:str):
         tol = 1e-12 * geometry.lattice_constant
-        print(f"Calculating eigenvalues...")
+        print(f"Calculating '{location}' eigenvalues...")
         start = perf_counter()
         if H_type == "real_space":
             H = self.H
@@ -283,7 +281,7 @@ class TightBinding:
             self.E_k_dict = E_k_dict
         else:
             ValueError("Not Implemented!")
-        print(f"Eigenvalues - Done.")
+        print(f"'{location}' Eigenvalues - Done.")
         return perf_counter() - start
 
     def _solve_eigenvalues(self, H, tol = 1e-12):
