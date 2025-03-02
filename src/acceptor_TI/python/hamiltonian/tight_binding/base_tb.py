@@ -2,19 +2,18 @@ import numpy as np
 from sympy.physics.quantum.cg import CG
 import re
 from matplotlib import pyplot as plt
-from time import perf_counter
+from abc import abstractmethod
 
-from ..cell_parser import CellParser
-from ..model_options import ModelOptions
-from ..geometry import Geometry
-
-from IPython import embed
+from ...model_options import ModelOptions
+from ...cell_parser import CellParser
+from ...geometry import Geometry
 
 class TightBinding:
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
     spin-orbit coupling interaction and Coulomb repulsive interaction terms.
     """
+
     def __init__(self, model_options:ModelOptions, cell_parser: CellParser):
         # Arguments
         self.model_options = model_options
@@ -28,6 +27,98 @@ class TightBinding:
         self._clebsch_gordan()
         # Sublattice
         self.sublattice_data_dict = {}
+
+    @abstractmethod
+    def build_hamiltonian(self, geometry:Geometry) -> None:
+        """
+        Must build the necessary sublattice data for the 'calculate_eigenvalues' method.
+        """
+        self.sublattice_data_dict = None
+        self.sublattice_connectivity = None
+        self.H = None
+        raise NotImplementedError("'build_hamiltonian' method not implemented!")
+
+    def sublattice_data(self, geometry:Geometry, idx):
+        neighbour_idxs = geometry.get_neighbour_idxs(idx)
+        dr_list = geometry.get_dr(idx, neighbour_idxs, type="list")
+        directional_cosines = geometry.bond_orientation(dr_list)
+        H_ij_dict, coupled_states_dict = self.get_hopping_info(
+                    neighbour_idxs, directional_cosines)
+        return {
+                "idx": idx,
+                "neighbour_idxs": neighbour_idxs,
+                "dr_dict": geometry.get_dr(idx, neighbour_idxs, type="dict"),
+                "hopping_dict": H_ij_dict,
+                "coupled_states_dict": coupled_states_dict
+            }
+
+    def l_to_orbitals(self, l, m_l):
+        """
+        Convert an angular momentum state |l, m_l> into a linear combination
+        of orbital states. Returns a dictionary where the keys are the orbital
+        labels ('s', 'p_x', 'p_y', 'p_z') and the values are the expansion coefficients.
+        
+        Using the conventions:
+        |0,0>         = |s>
+        |1,0>         = |p_z>
+        |1,+1>        = -1/sqrt(2) ( |p_x> + |p_y> )
+        |1,-1>        = +1/sqrt(2) ( |p_x> - |p_y> )
+        """
+        # s
+        if l == 0 and m_l == 0:
+            return {"s": 1.0}
+        # p
+        elif l == 1:
+            if m_l == 0:
+                return {"p_z": 1.0}
+            elif m_l == 1:
+                return {"p_x": -1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
+            elif m_l == -1:
+                return {"p_x":  1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
+            else:
+                raise ValueError("Invalid m_l value for l=1")
+        else:
+            raise ValueError("Conversion for l > 1 is not implemented!")      
+
+    def get_quantum_number(self, key, pos=0):
+        """
+        Extract a quantum number from a state string in ket notation: |a,b;c,d>
+        The 'pos' parameter determines which quantum number to extract:
+            pos = 0: returns the first quantum number (a)
+            pos = 1: returns the second quantum number (b)
+            pos = 2: returns the third quantum number (c)
+            pos = 3: returns the fourth quantum number (d)
+        
+        Parameters:
+            key (str): The state string.
+            pos (int): The 0-indexed position of the quantum number to extract.
+            
+        Returns:
+            float: The quantum number at the specified position.
+            
+        Raises:
+            ValueError: If the state string format is incorrect or if 'pos' is out of range.
+        """
+        match = self.state_pattern.search(key)
+        if match:
+            try:
+                # Adjust for 1-indexed regex groups
+                return float(match.group(pos + 1))
+            except IndexError:
+                raise ValueError(f"State string does not contain a quantum number at position {pos}")
+        else:
+            raise ValueError("State string format is incorrect.")
+
+    def get_hopping_info(self, neighbour_idxs, directional_cosines):
+        H_i = {}
+        coupled_states_i = {}
+        for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
+            j = neighbour_idx
+            state_hoppings = self._slater_koster(cosines)
+            H_ij, coupled_states = self._get_coupled_hopping(state_hoppings)
+            H_i[j] = H_ij
+            coupled_states_i[j] = coupled_states
+        return H_i, coupled_states_i
 
     def _clebsch_gordan(self):
         self.CG_coefficients = {}
@@ -45,73 +136,6 @@ class TightBinding:
                         if (m_l + m_s) != m_j:
                             continue
                         self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
-
-    def build_hamiltonian(self, geometry:Geometry, location:str):
-        self.location = location
-        print(f"Building '{location}' Hamiltonian...")
-        self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry, location)
-        idxs = [idx for i in sublattice_data_dict.values() for idx in i["neighbour_idxs"]]
-        self.unique_idxs = np.unique(np.array(idxs))
-        # Connectivity
-        N_subs = len(self.unique_idxs)
-        sublattice_connectivity = np.zeros(shape=(N_subs, N_subs))
-        # Hamiltonian
-        N_projections = self.n_orbitals * self.n_spins
-        N_sites = len(self.unique_idxs)
-        H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
-        # Build
-        idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
-        for sublattice_dict in sublattice_data_dict.values():
-            idx_i = sublattice_dict["idx"]
-            if not (idx_i in idx_map):
-                continue
-            i = idx_map[idx_i]
-            row_slice = slice(i * N_projections, (i + 1) * N_projections)
-            for idx_j in sublattice_dict["neighbour_idxs"]:
-                if idx_j in idx_map:
-                    j = idx_map[idx_j]
-                    sublattice_connectivity[i, j] = 1
-                    sublattice_connectivity[j, i] = 1 # h.c
-                    col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                    H_ij = sublattice_dict["hopping_dict"][idx_j]
-                    H_ij = sublattice_dict["hopping_dict"][idx_j]
-                    H[row_slice, col_slice] = H_ij
-                    H[col_slice, row_slice] = H_ij.conj().T # h.c
-        self.sublattice_connectivity = sublattice_connectivity
-        self.H = H
-        print(f"'{location}' Hamiltonian - Done.")
-
-    def _sublattice_data(self, geometry:Geometry, location:str):
-        self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs(location)
-        sublattice_data_dict = {}
-        for i, idx in enumerate(sublattice_idxs):
-            sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
-            neighbour_idxs = geometry.get_neighbour_idxs(idx)
-            dr_list = geometry.get_dr(idx, neighbour_idxs, type="list")
-            directional_cosines = geometry.bond_orientation(dr_list)
-            H_ij_dict, coupled_states_dict = self.get_hopping_info(
-                neighbour_idxs, directional_cosines)
-            sublattice_data_dict[sub_label] = {
-                "idx": idx,
-                "neighbour_idxs": neighbour_idxs,
-                "dr_dict": geometry.get_dr(idx, neighbour_idxs, type="dict"),
-                "hopping_dict": H_ij_dict,
-                "coupled_states_dict": coupled_states_dict
-            }
-        # Check we are considering unique sublattices
-        assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
-        return sublattice_data_dict
-
-    def get_hopping_info(self, neighbour_idxs, directional_cosines):
-        H_i = {}
-        coupled_states_i = {}
-        for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
-            j = neighbour_idx
-            state_hoppings = self._slater_koster(cosines)
-            H_ij, coupled_states = self._get_coupled_hopping(state_hoppings)
-            H_i[j] = H_ij
-            coupled_states_i[j] = coupled_states
-        return H_i, coupled_states_i
 
     def _slater_koster(self, cosines):
         nn_parser = self.cell_parser.eigenvalues.nn_hopping.value
@@ -175,9 +199,6 @@ class TightBinding:
         """
         dim = len(self.CG_coefficients.keys())
         H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
-        # i, j = 0, 0 would be interpreted as the |j=1/2, m=-1/2><j=1/2, m=-1/2| entry
-        # i, j = 0, 1 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-3/2| entry
-        # i, j = 0, 2 would be interpreted as the |j=1/2, m=+1/2><j=3/2, m=-3/2| entry
         # NOTE: Transitions to opposite spin-states are not allowed
         # NOTE: Assumed t_{ss}^{↑} == t_{ss}^{↓}
         coupled_states = {}
@@ -203,86 +224,34 @@ class TightBinding:
                         hopping_key = f"|{bra_orb}><{ket_orb}|"
                         t_hop = state_hoppings[hopping_key]
                         t_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * t_hop
+                        # if j_n == 3/2:
+                        #     t_nm+= delta_heavy
+                        # elif j_n = 1/2:
+                        #     t_nm += delta_light
                 # TODO: add spin-orbit coupling hopping "delta"
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = t_nm
                 H_ij[n, m] = t_nm
+        # FIXME: sort the matrix into a more predictable state, as currently,
+        # i, j = 0, 0 would be interpreted as the |j=1/2, m=-1/2><j=1/2, m=-1/2| entry
+        # i, j = 0, 1 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-3/2| entry
+        # i, j = 1, 0 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-1/2| entry
+        # i, j = 1, 1 would be interpreted as the |j=1/2, m=+1/2><j=1/2, m=+1/2| entry
+        # i, j = 0, 2 would be interpreted as the |j=1/2, m=+1/2><j=3/2, m=-3/2| entry
+        # i.e. unpredictable
+        # NOTE: maybe include make a unitary transformation matrix
         return H_ij, coupled_states
 
-    def l_to_orbitals(self, l, m_l):
+    @abstractmethod
+    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
         """
-        Convert an angular momentum state |l, m_l> into a linear combination
-        of orbital states. Returns a dictionary where the keys are the orbital
-        labels ('s', 'p_x', 'p_y', 'p_z') and the values are the expansion coefficients.
-        
-        Using the conventions:
-        |0,0>         = |s>
-        |1,0>         = |p_z>
-        |1,+1>        = -1/sqrt(2) ( |p_x> + |p_y> )
-        |1,-1>        = +1/sqrt(2) ( |p_x> - |p_y> )
+        Must calculate the necessary eigenvalues depending on the requested 
+        Hamiltonian type.
         """
-        if l == 0 and m_l == 0:
-            return {"s": 1.0}
-        elif l == 1:
-            if m_l == 0:
-                return {"p_z": 1.0}
-            elif m_l == 1:
-                return {"p_x": -1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            elif m_l == -1:
-                return {"p_x":  1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            else:
-                raise ValueError("Invalid m_l value for l=1")
-        else:
-            raise ValueError("Conversion for l > 1 is not implemented")      
-
-    def get_quantum_number(self, key, pos=0):
-        """
-        Extract a quantum number from a state string in ket notation: |a,b;c,d>
-        The 'pos' parameter determines which quantum number to extract:
-            pos = 0: returns the first quantum number (a)
-            pos = 1: returns the second quantum number (b)
-            pos = 2: returns the third quantum number (c)
-            pos = 3: returns the fourth quantum number (d)
-        
-        Parameters:
-            key (str): The state string.
-            pos (int): The 0-indexed position of the quantum number to extract.
-            
-        Returns:
-            float: The quantum number at the specified position.
-            
-        Raises:
-            ValueError: If the state string format is incorrect or if 'pos' is out of range.
-        """
-        match = self.state_pattern.search(key)
-        if match:
-            try:
-                # Adjust for 1-indexed regex groups
-                return float(match.group(pos + 1))
-            except IndexError:
-                raise ValueError(f"State string does not contain a quantum number at position {pos}")
-        else:
-            raise ValueError("State string format is incorrect.")
-
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str, location:str):
-        tol = 1e-12 * geometry.lattice_constant
-        print(f"Calculating '{location}' eigenvalues...")
-        start = perf_counter()
         if H_type == "real_space":
-            H = self.H
-            self.E = self._solve_eigenvalues(H, tol)
+            self.E = None
         elif H_type == "reciprocal_space":
-            E_k_dict = {}
-            for k_x in geometry.kx_vals:
-                for k_y in geometry.ky_vals:
-                    k = np.array([k_x, k_y])
-                    H_k = self._fourier_transform(k)
-                    E_k = self._solve_eigenvalues(H_k)
-                    E_k_dict[f"[{k_x},{k_y}]"] = E_k
-            self.E_k_dict = E_k_dict
-        else:
-            ValueError("Not Implemented!")
-        print(f"'{location}' Eigenvalues - Done.")
-        return perf_counter() - start
+            self.E_k_dict = None
+        raise NotImplementedError("'solve_eigenvalues' method not implemented")
 
     def _solve_eigenvalues(self, H, tol = 1e-12):
         E, U = np.linalg.eigh(H)
@@ -290,45 +259,27 @@ class TightBinding:
         self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         return E
 
-    def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
-        N_projections = self.n_orbitals * self.n_spins
-        dims = len(self.sublattice_idxs) * N_projections
-        H_k = np.zeros(shape=(dims, dims), dtype=complex) 
-        for n, sublattice_dict in enumerate(self.sublattice_data_dict.values()):
-            row_slice = slice(n * N_projections, (n + 1) * N_projections)
-            for m, _ in enumerate(self.sublattice_data_dict.values()):
-                col_slice = slice(m * N_projections, (m + 1) * N_projections)
-                H_k_nm = 0
-                # Diagonal elements
-                if n == m:
-                    continue
-                # Off-diagonal elements
-                else:
-                    for idx in sublattice_dict["neighbour_idxs"]:
-                        r_ij = sublattice_dict["dr_dict"][idx]
-                        phase = 1 if idx in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
-                        H_k_nm += phase * sublattice_dict["hopping_dict"][idx]
-                H_k[row_slice, col_slice] = H_k_nm
-                H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
-        return H_k
-
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))
         cmap = plt.get_cmap('coolwarm')
         cmap.set_bad('white')
-        M_masked = np.ma.masked_where(M == 0, M)
+        mask = np.isclose(M, 0, atol=1e-12)
+        # M_masked = np.ma.masked_where(mask, M)
         plt.subplot(1, 2, 1)
-        plt.imshow(M_masked.real, cmap=cmap)
+        plt.imshow(M.real, cmap=cmap)
         plt.title('Real Part')
         plt.colorbar()
         plt.subplot(1, 2, 2)
-        plt.imshow(M_masked.imag, cmap=cmap)
+        plt.imshow(M.imag, cmap=cmap)
         plt.title('Imaginary Part')
         plt.colorbar()
         plt.show()
-
+    
     def plot_dispersion(self, geometry: Geometry):
-        kx, ky = geometry.kx_vals, geometry.ky_vals
+        if self.model_options.location in ["bulk", "both"]:
+            kx, ky = geometry.kx_bulk, geometry.ky_bulk
+        elif self.model_options.location in ["edge", "both"]:
+            kx, ky = geometry.kx_edge, geometry.ky_edge
         n_kx, n_ky = len(kx), len(ky)
         E_k_list = []
         for k_x in kx:

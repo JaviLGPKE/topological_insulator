@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.spatial import ConvexHull
 
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser
@@ -14,7 +15,7 @@ class Geometry:
         self.n_sublattices = len(cell_parser.geometry.delta_vectors.value)
         self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
 
-    def build_lattice(self, size, N_k) -> None:
+    def build_lattice(self) -> None:
         """
         Builds the lattice structure in real space.
 
@@ -23,34 +24,40 @@ class Geometry:
         parser: Parameter
             The dictionary containing the geometrical parameters to replicate the lattice.
         """
-        self.N_k = N_k
+        self.N_r = N_r = self.model_options.N_r
+        self.N_k = N_k = self.model_options.N_k
         parser = self.cell_parser.geometry
         lattice_vectors = parser.lattice_vectors.value
         assert(len(lattice_vectors[0]) == self.n_dim)
 
         print(f"Building Geometry...")
-        self._build_lattice(size, parser)
+        self._build_lattice(N_r, parser)
         self._set_connectivity(parser)
-        self._build_brillouine_zone(size, N_k)
+        self._build_brillouine_zone(N_k)
+        self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
-    def _build_lattice(self, size, parser):
+    def _build_lattice(self, N_r, parser):
         self.lattice_constant = a = parser.lattice_constant.value
         lattice_vectors = parser.lattice_vectors.value
-        self.a1, self.a2 = a1, a2 = lattice_vectors[0], lattice_vectors[1]
+        self.a1, self.a2 = a1, a2 = (np.array(lattice_vectors[0]), 
+                                     np.array(lattice_vectors[1]))
         delta_vectors = parser.delta_vectors.value
         # Build lattice
-        sites, sublattice_label = [], []
+        sites, edge_sites, sublattice_label = [], [], []
         site_index = 0
-        for i in range(size):
-            for j in range(size):
+        for i in range(N_r):
+            for j in range(N_r):
                 for s, delta in enumerate(delta_vectors):
                     x = (i * a1[0] + j * a2[0] + delta[0]) * a
                     y = (i * a1[1] + j * a2[1] + delta[1]) * a
-                    sites.append([x, y])
+                    site = [x, y]
+                    sites.append(site)
+                    if i == 0 or i == N_r - 1 or j == 0 or j == N_r - 1:
+                        edge_sites.append(site)
                     sublattice_label.append(s)
                     site_index += 1
-        self.sites = np.array(sites)
+        self.sites, self.edge_sites = np.array(sites), np.array(edge_sites)
         self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
         self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
 
@@ -85,7 +92,7 @@ class Geometry:
                     C[j, i] = 1
         self.connectivity_matrix = C
 
-    def _build_brillouine_zone(self, size, N_k):
+    def _build_brillouine_zone(self, N_k):
         # Reciprocal vectors
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
@@ -93,9 +100,19 @@ class Geometry:
         self.b1 = b1 = (2*np.pi / area) * np.array([a2[1], -a2[0]])
         self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1], a1[0]])
         # Generate grid for 3D dispersion plot
-        self.kx_vals, self.ky_vals = kx_vals, ky_vals = (
+        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (
             np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
-        self.kx_grid, self.ky_grid = np.meshgrid(kx_vals, ky_vals)
+        self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
+        if self.model_options.location in ["edge", "both"]:
+            a = self.lattice_constant
+            k_dir = a1 if self.a1[1] > self.a2[1] else a2
+            # Scaling factor
+            t_x = (np.pi/a) / np.abs(k_dir[0]) if k_dir[0] != 0 else np.inf
+            t_y = (np.pi/a) / np.abs(k_dir[1]) if k_dir[1] != 0 else np.inf
+            t_max = min(t_x, t_y)
+            t_vals = np.linspace(-t_max, t_max, N_k)
+            self.kx_edge, self.ky_edge = kx_edge, ky_edge = (
+                t_vals * k_dir[0], t_vals * k_dir[1])
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
             # gamma = np.array([0.0, 0.0])
@@ -121,13 +138,14 @@ class Geometry:
         if location == "bulk":
             x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
             y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
+            idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
-            x_idxs = np.where(np.isclose(sites[:, 0], 3*x_max/4, rtol=2e-1*a))[0]
-            y_min = min(sites[x_idxs, 1])
-            y_idxs = np.where(np.isclose(sites[:, 1], y_min, rtol=1e-1*a))[0]
+            edge_sites = self.edge_sites
+            edge_idxs = np.where(np.isclose(edge_sites[:, 0], 3*x_max/4, rtol=1e-1*a))[0]
+            candidate_edge_sites = edge_sites[edge_idxs]
+            idx_candidates = [np.where((sites == candidate).all(axis=1))[0][0] for candidate in candidate_edge_sites]
         else: 
             raise ValueError(f"Location '{location}' not available")
-        idx_candidates = np.intersect1d(x_idxs, y_idxs)
         chosen_idxs = [c for c in idx_candidates if self.sublattice_label_idxs[c] in sublattices]
         return chosen_idxs[0]
 
@@ -139,42 +157,36 @@ class Geometry:
         neighbour_idxs = self.get_neighbour_idxs(chosen_idx)
         sublattice_idxs = [chosen_idx]
         a = self.lattice_constant
-
         if location == "bulk":
             sublattice_idxs.extend(
                 [idx for i, idx in enumerate(neighbour_idxs) if i < (self.n_sublattices - 1)]
             )
         elif location == "edge":
-
-            def unique_labels(idxs):
-                return set(self.sublattice_label_idxs[i] for i in idxs)
-            
-            sites = self.sites
-            y_min = sites[chosen_idx, 1]
-            edge_candidates = [idx for idx in neighbour_idxs if sites[idx, 1] <= y_min]
-            non_edge_candidates = [idx for idx in neighbour_idxs if sites[idx, 1] > y_min]
-            num_needed = self.n_sublattices - 1
-            sublattice_idxs.extend(edge_candidates[:num_needed])
-            while len(unique_labels(sublattice_idxs)) < self.n_sublattices and non_edge_candidates:
-                current_labels = [self.sublattice_label_idxs[i] for i in sublattice_idxs]
-                freq = {}
-                for label in current_labels:
-                    freq[label] = freq.get(label, 0) + 1
-                duplicate_indices = [i for i, idx in enumerate(sublattice_idxs)
-                                    if freq[self.sublattice_label_idxs[idx]] > 1]
-                if not duplicate_indices:
+            edge_candidates, non_edge_candidates  = [], []
+            for i, idx in enumerate(neighbour_idxs):
+                site = self.sites[idx]
+                if site in self.edge_sites:
+                    edge_candidates.append(idx)
+                else:
+                    non_edge_candidates.append(idx)
+            current_labels = {self.sublattice_label_idxs[i] for i in sublattice_idxs}
+            # Add edge candidates if their sublattice label is new.
+            for idx in edge_candidates:
+                label = self.sublattice_label_idxs[idx]
+                if label not in current_labels:
+                    sublattice_idxs.append(idx)
+                    current_labels.add(label)
+                if len(sublattice_idxs) == self.n_sublattices:
                     break
-                # Look for a non-edge candidate with missing label
-                swapped = False
-                for candidate in list(non_edge_candidates):
-                    candidate_label = self.sublattice_label_idxs[candidate]
-                    if candidate_label not in unique_labels(sublattice_idxs):
-                        sublattice_idxs[duplicate_indices[0]] = candidate
-                        non_edge_candidates.remove(candidate)
-                        swapped = True
+            # If the unit cell is still incomplete, add from non-edge candidates.
+            if len(sublattice_idxs) < self.n_sublattices:
+                for idx in non_edge_candidates:
+                    label = self.sublattice_label_idxs[idx]
+                    if label not in current_labels:
+                        sublattice_idxs.append(idx)
+                        current_labels.add(label)
+                    if len(sublattice_idxs) == self.n_sublattices:
                         break
-                if not swapped:
-                    break
         # Sort idxs according to label order
         sublattice_idxs = sorted(sublattice_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
         return sublattice_idxs
@@ -198,6 +210,25 @@ class Geometry:
             cos_theta = dr / bond_length
             cos_theta_list.append(cos_theta)
         return np.array(cos_theta_list)
+
+    def get_edge_path(self, sublattices: list):
+        sites = self.sites
+        a1, a2 = self.a1, self.a2 
+        # NOTE: we start from the bottom edge, so we need to go backwards
+        # along the opposite direction of the descending basis vector
+        a = a2 if self.a1[1] > self.a2[1] else a1
+        sublattices_considered = {}
+        for idx in sublattices:
+            label = self.sublattice_label_idxs[idx]
+            sublattices_considered[label] = []
+            path = sites[idx].copy() 
+            for _ in range(self.N_r-1):
+                path -= a
+                site_i = np.where(np.all(np.isclose(sites, path, atol=1e-8), axis=1))[0]
+                if len(site_i) == 0:
+                    raise ValueError(f"Site {path} not found in self.sites")
+                sublattices_considered[label].append(site_i[0])
+        return sublattices_considered
 
     def plot_lattice(self, ax=None):
         """

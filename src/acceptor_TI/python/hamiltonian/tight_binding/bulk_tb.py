@@ -1,0 +1,96 @@
+import numpy as np
+from time import perf_counter
+
+from .base_tb import TightBinding
+from ...geometry import Geometry
+
+class TightBindingBulk(TightBinding):    
+
+    def build_hamiltonian(self, geometry:Geometry):
+        print(f"Building 'Bulk' Hamiltonian...")
+        self.sublattice_data_dict = self._sublattice_data(geometry)
+        sublattice_data_dict:dict = self.sublattice_data_dict
+        idxs = [idx for i in sublattice_data_dict.values() for idx in i["neighbour_idxs"]]
+        self.unique_idxs = np.unique(np.array(idxs))
+        # Connectivity
+        N_subs = len(self.unique_idxs)
+        sublattice_connectivity = np.zeros(shape=(N_subs, N_subs))
+        # Hamiltonian
+        N_projections = self.n_orbitals * self.n_spins
+        N_sites = len(self.unique_idxs)
+        H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
+        # Build
+        idx_map = {idx: pos for pos, idx in enumerate(self.unique_idxs)}
+        for sublattice_dict in sublattice_data_dict.values():
+            idx_i = sublattice_dict["idx"]
+            if idx_i not in idx_map:
+                continue
+            i = idx_map[idx_i]
+            row_slice = slice(i * N_projections, (i + 1) * N_projections)
+            for idx_j in sublattice_dict["neighbour_idxs"]:
+                if idx_j not in idx_map:
+                    continue
+                j = idx_map[idx_j]
+                sublattice_connectivity[i, j] = 1
+                sublattice_connectivity[j, i] = 1 # h.c
+                col_slice = slice(j * N_projections, (j + 1) * N_projections)
+                H_ij = sublattice_dict["hopping_dict"][idx_j]
+                H_ij = sublattice_dict["hopping_dict"][idx_j]
+                H[row_slice, col_slice] = H_ij
+                H[col_slice, row_slice] = H_ij.conj().T # h.c
+        self.sublattice_connectivity = sublattice_connectivity
+        self.H = H
+        print(f"'Bulk' Hamiltonian - Done.")
+
+    def _sublattice_data(self, geometry:Geometry):
+        self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs("bulk")
+        sublattice_data_dict = {}
+        for i, idx in enumerate(sublattice_idxs):
+            sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
+            sublattice_data_dict[sub_label] = self.sublattice_data(geometry, idx)
+        # Check we are considering unique sublattices
+        assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
+        return sublattice_data_dict
+
+    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+        tol = 1e-12 * geometry.lattice_constant
+        print(f"Calculating 'Bulk' eigenvalues...")
+        start = perf_counter()
+        if H_type == "real_space":
+            H = self.H
+            self.E = self._solve_eigenvalues(H, tol)
+        elif H_type == "reciprocal_space":
+            E_k_dict = {}
+            for k_x in geometry.kx_bulk:
+                for k_y in geometry.ky_bulk:
+                    k = np.array([k_x, k_y])
+                    H_k = self._fourier_transform(k)
+                    E_k = self._solve_eigenvalues(H_k)
+                    E_k_dict[f"[{k_x},{k_y}]"] = E_k
+            self.E_k_dict = E_k_dict
+        else:
+            ValueError("Only 'real' and 'reciprocal' problems considered")
+        print(f"'Bulk' Eigenvalues - Done.")
+        return perf_counter() - start
+
+    def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
+        N_projections = self.n_orbitals * self.n_spins
+        dims = len(self.sublattice_idxs) * N_projections
+        H_k = np.zeros(shape=(dims, dims), dtype=complex) 
+        for n, sublattice_dict in enumerate(self.sublattice_data_dict.values()):
+            row_slice = slice(n * N_projections, (n + 1) * N_projections)
+            for m, _ in enumerate(self.sublattice_data_dict.values()):
+                col_slice = slice(m * N_projections, (m + 1) * N_projections)
+                H_k_nm = 0
+                # Diagonal elements
+                if n == m:
+                    continue
+                # Off-diagonal elements
+                else:
+                    for idx in sublattice_dict["neighbour_idxs"]:
+                        r_ij = sublattice_dict["dr_dict"][idx]
+                        bloch_phase = 1 if idx in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
+                        H_k_nm += bloch_phase * sublattice_dict["hopping_dict"][idx]
+                H_k[row_slice, col_slice] = H_k_nm
+                H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
+        return H_k

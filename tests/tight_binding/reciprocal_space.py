@@ -12,8 +12,9 @@ hopping_dict["t_pp_sigma"] = 1
 hopping_dict["t_pp_pi"] = -0.5
 
 problem.setup(
-    size = 10,
+    N_r = 10,
     N_k = 400, 
+    location = "edge"
 )
 
 problem.run(

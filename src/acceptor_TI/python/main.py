@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from .model_options import ModelOptions
 from .cell_parser import CellParser
 from .geometry import Geometry
-from .hamiltonian import TightBinding, WaveFunction
+from .hamiltonian import (TightBinding, TightBindingBulk, TightBindingEdge, WaveFunction)
 
 class Problem:
     def __init__(self, data_path:str, file_name:str, save_path=None):
@@ -21,20 +21,23 @@ class Problem:
             }
         }
     
-    def setup(self, size=10, N_k=200):
-        assert(size >= 10)
+    def setup(self, N_r=10, N_k=200, location:str = "bulk"):
+        assert(N_r >= 10)
         # Model Options
-        model_options = ModelOptions(size, N_k)
+        self.model_options = ModelOptions(N_r, N_k, location)
         # Geometry
-        self.geometry = Geometry(model_options=model_options, cell_parser=self.cell_parser)
-        self.geometry.build_lattice(size, N_k)
+        self.geometry = Geometry(model_options=self.model_options, cell_parser=self.cell_parser)
+        self.geometry.build_lattice()
         # Hamiltonian
-        for location in self.Hamiltonian.keys():
+        for key in self.Hamiltonian.keys():
             # Tight-Binding Model
-            self.Hamiltonian[location]["tight_binding"] = TightBinding(
-                model_options=model_options, cell_parser=self.cell_parser)
+            if location not in [key, "both"]:
+                continue
+            TB = TightBindingBulk if location == "bulk" else TightBindingEdge
+            self.Hamiltonian[location]["tight_binding"] = TB(
+                model_options=self.model_options, cell_parser=self.cell_parser)
             tight_binding:TightBinding = self.Hamiltonian[location]["tight_binding"]
-            tight_binding.build_hamiltonian(geometry=self.geometry, location=location)
+            tight_binding.build_hamiltonian(geometry=self.geometry)
             # WaveFunction
             # wavefunction = WaveFunction(cell_parser=self.cell_parser)
             # self.Hamiltonian[location]["wavefunction"] = wavefunction.build_wavefunction()
@@ -45,9 +48,11 @@ class Problem:
             # self.geometry.update_geometry() 
             # self.tight_biding.update_data() 
             ValueError("Acceptor case not implemented!")
-        for location in self.Hamiltonian.keys():
-            tight_binding:TightBinding = self.Hamiltonian[location]["tight_binding"]
-            tight_binding.solve_eigenvalues(self.geometry, acceptor, H_type, location)
+        for key in self.Hamiltonian.keys():
+            if self.model_options.location not in [key, "both"]:
+                continue
+            tight_binding:TightBinding = self.Hamiltonian[key]["tight_binding"]
+            tight_binding.solve_eigenvalues(self.geometry, acceptor, H_type)
     
     def plot(self, plot_type="lattice", location:str=None):
         if plot_type == "lattice":
