@@ -33,7 +33,6 @@ class Geometry:
         print(f"Building Geometry...")
         self._build_lattice(N_r, parser)
         self._set_connectivity(parser)
-        self._build_brillouine_zone(N_k)
         self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
@@ -92,27 +91,25 @@ class Geometry:
                     C[j, i] = 1
         self.connectivity_matrix = C
 
-    def _build_brillouine_zone(self, N_k):
+    def _build_brillouine_zone(self, edge_idxs=None):
         # Reciprocal vectors
+        N_k = self.N_k
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
         area = a1[0]*a2[1] - a1[1]*a2[0]
         self.b1 = b1 = (2*np.pi / area) * np.array([a2[1], -a2[0]])
         self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1], a1[0]])
-        # Generate grid for 3D dispersion plot
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (
             np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
-        if self.model_options.location in ["edge", "both"]:
-            a = self.lattice_constant
-            k_dir = a1 if self.a1[1] > self.a2[1] else a2
-            # Scaling factor
-            t_x = (np.pi/a) / np.abs(k_dir[0]) if k_dir[0] != 0 else np.inf
-            t_y = (np.pi/a) / np.abs(k_dir[1]) if k_dir[1] != 0 else np.inf
-            t_max = min(t_x, t_y)
-            t_vals = np.linspace(-t_max, t_max, N_k)
-            self.kx_edge, self.ky_edge = kx_edge, ky_edge = (
-                t_vals * k_dir[0], t_vals * k_dir[1])
+        if self.model_options.location == "edge":
+            # FIXME: this method is not general for any lattice
+            self.T = T = a1 if self.a1[1] > self.a2[1] else a2
+            self.T_norm = T_norm = np.linalg.norm(T)
+            self.T_hat = T/T_norm
+            k_max, k_min = np.pi/(a*T_norm), -1*np.pi/(a*T_norm) 
+            self.k_edge = np.linspace(k_min, k_max, N_k)
+
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
             # gamma = np.array([0.0, 0.0])
@@ -123,8 +120,8 @@ class Geometry:
             # for i in range(len(path)-1):
             #     start = path[i]
             #     end = path[i+1]
-            #     for t in np.linspace(0, 1, size**2):
-            #         frac_coords = (1 - t)*start + t*end
+            #     for r in np.linspace(0, 1, N_r**2):
+            #         frac_coords = (1 - r)*start + r*end
             #         k = frac_coords[0]*b1 + frac_coords[1]*b2
             #         self.k_path.append(k)
             # self.k_path = np.array(self.k_path)
@@ -196,11 +193,25 @@ class Geometry:
         neighbours_idx = np.where(C[idx, :] == 1)[0]
         return neighbours_idx
 
-    def get_dr(self, bulk_idx, neighbour_idxs, type="list"):
-        if type == "list":
-            return [self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs]
-        elif type == "dict":
-            return {n: self.sites[n] - self.sites[bulk_idx] for n in neighbour_idxs}
+    def get_dr(self, location, bulk_idx, neighbour_idxs, type="list"):
+        T_hat, T_norm = self.T_hat, self.T_norm
+        dr_list, dm_list = [], []
+        i = bulk_idx
+        for j in neighbour_idxs:
+            r_ij = self.sites[i] - self.sites[j]
+            if location == "edge":
+                projection = np.dot(r_ij, T_hat) / T_norm
+                m_ij = projection  # translation count
+                dm_list.append(m_ij)
+                # print(bulk_idx, n, dm, r_ij, r_ij - (dm * self.T))
+                r_ij -= m_ij * self.T  # unwrap displacement
+            dr_list.append(r_ij)
+        if type == "dict":
+            dr_dict = {n: dr_list[i] for i, n in enumerate(neighbour_idxs)}
+            dm_dict = {n: dm_list[i] for i, n in enumerate(neighbour_idxs)}
+            return dr_dict, dm_dict
+        elif type == "list":
+            return dr_list, dm_list
 
     def bond_orientation(self, dr_list):
         cos_theta_list = []

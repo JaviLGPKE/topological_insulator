@@ -38,16 +38,19 @@ class TightBinding:
         self.H = None
         raise NotImplementedError("'build_hamiltonian' method not implemented!")
 
-    def sublattice_data(self, geometry:Geometry, idx):
+    def sublattice_data(self, geometry:Geometry, location:str, idx:int):
         neighbour_idxs = geometry.get_neighbour_idxs(idx)
-        dr_list = geometry.get_dr(idx, neighbour_idxs, type="list")
+        dr_list, dm_list = geometry.get_dr("bulk", idx, neighbour_idxs, type="list")
+        dr_dict, dm_dict = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
         directional_cosines = geometry.bond_orientation(dr_list)
         H_ij_dict, coupled_states_dict = self.get_hopping_info(
                     neighbour_idxs, directional_cosines)
+        
         return {
                 "idx": idx,
                 "neighbour_idxs": neighbour_idxs,
-                "dr_dict": geometry.get_dr(idx, neighbour_idxs, type="dict"),
+                "dr_dict": dr_dict,
+                "dm_dict": dm_dict,
                 "hopping_dict": H_ij_dict,
                 "coupled_states_dict": coupled_states_dict
             }
@@ -274,40 +277,10 @@ class TightBinding:
         plt.title('Imaginary Part')
         plt.colorbar()
         plt.show()
-    
+
+    @abstractmethod
     def plot_dispersion(self, geometry: Geometry):
-        if self.model_options.location in ["bulk", "both"]:
-            kx, ky = geometry.kx_bulk, geometry.ky_bulk
-        elif self.model_options.location in ["edge", "both"]:
-            kx, ky = geometry.kx_edge, geometry.ky_edge
-        n_kx, n_ky = len(kx), len(ky)
-        E_k_list = []
-        for k_x in kx:
-            for k_y in ky:
-                key = f"[{k_x},{k_y}]"
-                E_k_list.append(self.E_k_dict[key])
-        E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
-        E_3d = E_stacked.reshape(n_kx, n_ky, -1)
-        n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
-        KX, KY = np.meshgrid(kx, ky, indexing='ij') 
-        fig = plt.figure(figsize=(10, 6))
-        ax = fig.add_subplot(111, projection='3d')
-        for band in range(n_bands):
-            E = E_3d[:, :, band]
-            if np.allclose(E, 0, rtol=1e-12):
-                # Ignore zero values
-                continue 
-            ax.plot_surface(
-                KX, KY, E,
-                cmap='viridis',
-                alpha=0.6, 
-                edgecolor='none'
-            )
-        ax.set_xlabel(r'$k_x$', fontsize=12)
-        ax.set_ylabel(r'$k_y$', fontsize=12)
-        ax.set_zlabel(r'$E$', fontsize=12)
-        plt.title('3D Band Structure', fontsize=14)
-        plt.show()
+        raise NotImplementedError("Implement dispersion plot method!")
 
     def plot_band_structure(self, geometry: Geometry):
         # TODO:

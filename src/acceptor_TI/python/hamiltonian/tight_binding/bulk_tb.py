@@ -1,10 +1,15 @@
 import numpy as np
+from matplotlib import pyplot as plt
 from time import perf_counter
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
 
 class TightBindingBulk(TightBinding):    
+
+    def __init__(self, model_options, cell_parser):
+        super().__init__(model_options, cell_parser)
+        self.location = "bulk"
 
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building 'Bulk' Hamiltonian...")
@@ -43,11 +48,12 @@ class TightBindingBulk(TightBinding):
         print(f"'Bulk' Hamiltonian - Done.")
 
     def _sublattice_data(self, geometry:Geometry):
-        self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs("bulk")
+        self.sublattice_idxs = sublattice_idxs = geometry.get_sublattice_idxs(self.location)
+        geometry._build_brillouine_zone()
         sublattice_data_dict = {}
         for i, idx in enumerate(sublattice_idxs):
             sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
-            sublattice_data_dict[sub_label] = self.sublattice_data(geometry, idx)
+            sublattice_data_dict[sub_label] = self.sublattice_data(geometry, self.location, idx)
         # Check we are considering unique sublattices
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
@@ -94,3 +100,34 @@ class TightBindingBulk(TightBinding):
                 H_k[row_slice, col_slice] = H_k_nm
                 H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
         return H_k
+
+    def plot_dispersion(self, geometry: Geometry):  
+        kx, ky = geometry.kx_bulk, geometry.ky_bulk
+        n_kx, n_ky = len(kx), len(ky)
+        E_k_list = []
+        for k_x in kx:
+            for k_y in ky:
+                key = f"[{k_x},{k_y}]"
+                E_k_list.append(self.E_k_dict[key])
+        E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
+        E_3d = E_stacked.reshape(n_kx, n_ky, -1)
+        n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
+        KX, KY = np.meshgrid(kx, ky, indexing='ij') 
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        for band in range(n_bands):
+            E = E_3d[:, :, band]
+            if np.allclose(E, 0, rtol=1e-12):
+                # Ignore zero values
+                continue 
+            ax.plot_surface(
+                KX, KY, E,
+                cmap='viridis',
+                alpha=0.6, 
+                edgecolor='none'
+            )
+        ax.set_xlabel(r'$k_x$', fontsize=12)
+        ax.set_ylabel(r'$k_y$', fontsize=12)
+        ax.set_zlabel(r'$E$', fontsize=12)
+        plt.title('3D Band Structure', fontsize=14)
+        plt.show()
