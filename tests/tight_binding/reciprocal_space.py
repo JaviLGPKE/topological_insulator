@@ -23,11 +23,3 @@ problem.run(
 )
 
 problem.plot(plot_type="dispersion", location="edge")
-
-# [np.int64(98), np.int64(96), np.int64(94), np.int64(92), 
-#  np.int64(90), np.int64(88), np.int64(86), np.int64(84), 
-#  np.int64(82), np.int64(80), np.int64(79), np.int64(77), 
-#  np.int64(75), np.int64(73), np.int64(71), np.int64(69), 
-#  np.int64(67), np.int64(65), np.int64(63), np.int64(61)]
-
-# 98, 79, 99 (0), 96, 77, 97 (0), 75, 94, 95, 73, 92, 93, 90, 71, 88, 69, 89, 86, 67, 

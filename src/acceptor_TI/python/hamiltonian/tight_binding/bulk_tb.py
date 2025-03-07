@@ -42,7 +42,6 @@ class TightBindingBulk(TightBinding):
                 H_ij = sublattice_dict["hopping_dict"][idx_j]
                 H_ij = sublattice_dict["hopping_dict"][idx_j]
                 H[row_slice, col_slice] = H_ij
-                H[col_slice, row_slice] = H_ij.conj().T # h.c
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"'Bulk' Hamiltonian - Done.")
@@ -98,7 +97,6 @@ class TightBindingBulk(TightBinding):
                         bloch_phase = 1 if idx in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
                         H_k_nm += bloch_phase * sublattice_dict["hopping_dict"][idx]
                 H_k[row_slice, col_slice] = H_k_nm
-                H_k[col_slice, row_slice] = H_k_nm.conj().T # h.c
         return H_k
 
     def plot_dispersion(self, geometry: Geometry):  

@@ -43,11 +43,10 @@ class TightBindingEdge(TightBinding):
                         continue
                     j = idx_map[idx_j]
                     sublattice_connectivity[i, j] = 1
-                    sublattice_connectivity[j, i] = 1 # h.c
+                    # sublattice_connectivity[j, i] = 1 # h.c
                     col_slice = slice(j * N_projections, (j + 1) * N_projections)
                     H_ij:np.ndarray = site_dict["hopping_dict"][idx_j]
                     H[row_slice, col_slice] = H_ij
-                    H[col_slice, row_slice] = H_ij.conj().T # h.c
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"'Edge' Hamiltonian - Done.")
@@ -73,7 +72,7 @@ class TightBindingEdge(TightBinding):
                 sublattice_n = np.where(np.all(np.isclose(sites, path, atol=1e-8), axis=1))[0][0]
                 sublattice_data_dict[sub_label][sublattice_n] = self.sublattice_data(geometry, self.location, sublattice_n)
                 sublattice_idxs.append(sublattice_n)
-        self.sublattice_idxs = sublattice_idxs
+        self.sublattice_idxs = np.array(sublattice_idxs)
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
 
@@ -114,7 +113,6 @@ class TightBindingEdge(TightBinding):
                     m_ij = site_dict["dm_dict"][idx_j]
                     phase = np.exp(1j * k * m_ij * T_norm)
                     H_k[row_slice, col_slice] *= phase
-                    H_k[col_slice, row_slice] *= phase.conj().T # h.c
         return H_k
 
     def plot_dispersion(self, geometry: Geometry) -> None:

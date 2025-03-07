@@ -194,17 +194,17 @@ class Geometry:
         return neighbours_idx
 
     def get_dr(self, location, bulk_idx, neighbour_idxs, type="list"):
-        T_hat, T_norm = self.T_hat, self.T_norm
         dr_list, dm_list = [], []
         i = bulk_idx
         for j in neighbour_idxs:
             r_ij = self.sites[i] - self.sites[j]
             if location == "edge":
-                projection = np.dot(r_ij, T_hat) / T_norm
-                m_ij = projection  # translation count
+                T_hat, T_norm = self.T_hat, self.T_norm
+                m_ij = np.dot(r_ij, T_hat) / T_norm  # translation count
                 dm_list.append(m_ij)
-                # print(bulk_idx, n, dm, r_ij, r_ij - (dm * self.T))
                 r_ij -= m_ij * self.T  # unwrap displacement
+            else:
+                dm_list.append(0)
             dr_list.append(r_ij)
         if type == "dict":
             dr_dict = {n: dr_list[i] for i, n in enumerate(neighbour_idxs)}
@@ -241,7 +241,7 @@ class Geometry:
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
 
-    def plot_lattice(self, ax=None):
+    def plot_lattice(self, ax=None, sites_of_interest=None):
         """
         Plots the 2D geometry of the lattice:
         - Sites as colored dots (each color = one sublattice).
@@ -282,6 +282,23 @@ class Geometry:
                     color=color_list[s % len(color_list)],
                     label=label_str,
                     s=20, alpha=0.9, zorder=2)
+        # 3) Highlight sites_of_interest if provided
+        if sites_of_interest is not None:
+            sites_of_interest = np.asarray(sites_of_interest)
+            if sites_of_interest.size > 0:
+                # Validate indices
+                if (sites_of_interest.dtype.kind not in ('i', 'u') or 
+                    np.any(sites_of_interest < 0) or 
+                    np.any(sites_of_interest >= N)):
+                    raise ValueError("All elements in sites_of_interest must be integers within [0, N-1].")
+                # Extract coordinates
+                highlight_coords = sites[sites_of_interest]
+                # Plot with red color and larger size
+                ax.scatter(
+                    highlight_coords[:, 0], highlight_coords[:, 1],
+                    color='red', s=40, edgecolors='black', linewidths=0.8,
+                    zorder=3, label = "SoI"
+                )
         ax.set_aspect('equal', adjustable='box')
         ax.set_xlabel("x")
         ax.set_ylabel("y")
