@@ -45,7 +45,6 @@ class TightBinding:
         directional_cosines = geometry.bond_orientation(dr_list)
         H_ij_dict, coupled_states_dict = self.get_hopping_info(
                     neighbour_idxs, directional_cosines)
-        
         return {
                 "idx": idx,
                 "neighbour_idxs": neighbour_idxs,
@@ -256,11 +255,9 @@ class TightBinding:
             self.E_k_dict = None
         raise NotImplementedError("'solve_eigenvalues' method not implemented")
 
-    def _solve_eigenvalues(self, H, tol = 1e-12):
+    def _solve_eigenvalues(self, H):
         E, U = np.linalg.eigh(H)
-        H_diag = U.conj().T @ H @ U
-        self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
-        return E
+        return E, U
 
     def _visualise_matrix(self, M):
         plt.figure(figsize=(12, 5))

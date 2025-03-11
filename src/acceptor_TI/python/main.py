@@ -33,10 +33,10 @@ class Problem:
             # Tight-Binding Model
             if location not in [key, "both"]:
                 continue
-            TB = TightBindingBulk if location == "bulk" else TightBindingEdge
-            self.hamiltonian[location]["tight_binding"] = TB(
+            TB = TightBindingBulk if key == "bulk" else TightBindingEdge
+            self.hamiltonian[key]["tight_binding"] = TB(
                 model_options=self.model_options, cell_parser=self.cell_parser)
-            tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
+            tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.build_hamiltonian(geometry=self.geometry)
             # WaveFunction
             # wavefunction = WaveFunction(cell_parser=self.cell_parser)

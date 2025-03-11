@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.spatial import ConvexHull
+from itertools import combinations
 
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser
@@ -25,7 +26,7 @@ class Geometry:
             The dictionary containing the geometrical parameters to replicate the lattice.
         """
         self.N_r = N_r = self.model_options.N_r
-        self.N_k = N_k = self.model_options.N_k
+        self.N_k = self.model_options.N_k
         parser = self.cell_parser.geometry
         lattice_vectors = parser.lattice_vectors.value
         assert(len(lattice_vectors[0]) == self.n_dim)
@@ -33,6 +34,7 @@ class Geometry:
         print(f"Building Geometry...")
         self._build_lattice(N_r, parser)
         self._set_connectivity(parser)
+        self._build_brillouine_zone()
         self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
@@ -91,7 +93,7 @@ class Geometry:
                     C[j, i] = 1
         self.connectivity_matrix = C
 
-    def _build_brillouine_zone(self, edge_idxs=None):
+    def _build_brillouine_zone(self):
         # Reciprocal vectors
         N_k = self.N_k
         a = self.lattice_constant
@@ -102,13 +104,12 @@ class Geometry:
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (
             np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
-        if self.model_options.location == "edge":
-            # FIXME: this method is not general for any lattice
-            self.T = T = a1 if self.a1[1] > self.a2[1] else a2
+        if self.model_options.location in ["edge", "both"]:
+            T = a1 if a2[1] > a1[1] else a2
+            self.T = T
             self.T_norm = T_norm = np.linalg.norm(T)
             self.T_hat = T/T_norm
-            k_max, k_min = np.pi/(a*T_norm), -1*np.pi/(a*T_norm) 
-            self.k_edge = np.linspace(k_min, k_max, N_k)
+            self.k_edge = np.linspace(-np.pi/a, np.pi/(a), N_k)
 
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
@@ -130,15 +131,17 @@ class Geometry:
         a = self.lattice_constant
         sublattices = [0]
         sites = self.sites
-        x_max = max(sites[:, 0])
-        y_max = max(sites[:, 1])
+        x_max, y_max = max(sites[:, 0]), max(sites[:, 1])
+        x_min, y_min = min(sites[:, 0]), min(sites[:, 1])
         if location == "bulk":
             x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
             y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
-            edge_idxs = np.where(np.isclose(edge_sites[:, 0], 3*x_max/4, rtol=1e-1*a))[0]
+            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/2, rtol=2.2e-1*a))[0]
+            y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=2.5e-1*a))[0]
+            edge_idxs = np.intersect1d(x_idxs, y_idxs)
             candidate_edge_sites = edge_sites[edge_idxs]
             idx_candidates = [np.where((sites == candidate).all(axis=1))[0][0] for candidate in candidate_edge_sites]
         else: 
@@ -147,46 +150,45 @@ class Geometry:
         return chosen_idxs[0]
 
     def get_sublattice_idxs(self, location: str):
-        # NOTE: must only consider unique sublattices that match
-        # within coordinate conditions
+        # Get the index for the chosen site and store it as an attribute
         chosen_idx = self.get_location_idx(location)
         setattr(self, f"{location}_idx", chosen_idx)
         neighbour_idxs = self.get_neighbour_idxs(chosen_idx)
-        sublattice_idxs = [chosen_idx]
+        candidate_idxs = list(neighbour_idxs)
+        candidate_idxs.append(chosen_idx)
+        unit_cell_idxs = self._find_unit_cell(candidate_idxs)
+        return sorted(unit_cell_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
+
+    def _find_unit_cell(self, idxs, tol=1e-5):
+        """
+        Given a list of indices and a function get_coord(idx) that returns the coordinates
+        for that index, this function finds the largest subset for which all pairwise distances
+        are equal within a tolerance tol.
+        """
+        sublattice_labels = {
+        idx: self.sublattice_labels[self.sublattice_label_idxs[idx]]
+        for idx in idxs
+        }
         a = self.lattice_constant
-        if location == "bulk":
-            sublattice_idxs.extend(
-                [idx for i, idx in enumerate(neighbour_idxs) if i < (self.n_sublattices - 1)]
-            )
-        elif location == "edge":
-            edge_candidates, non_edge_candidates  = [], []
-            for i, idx in enumerate(neighbour_idxs):
-                site = self.sites[idx]
-                if site in self.edge_sites:
-                    edge_candidates.append(idx)
-                else:
-                    non_edge_candidates.append(idx)
-            current_labels = {self.sublattice_label_idxs[i] for i in sublattice_idxs}
-            # Add edge candidates if their sublattice label is new.
-            for idx in edge_candidates:
-                label = self.sublattice_label_idxs[idx]
-                if label not in current_labels:
-                    sublattice_idxs.append(idx)
-                    current_labels.add(label)
-                if len(sublattice_idxs) == self.n_sublattices:
-                    break
-            # If the unit cell is still incomplete, add from non-edge candidates.
-            if len(sublattice_idxs) < self.n_sublattices:
-                for idx in non_edge_candidates:
-                    label = self.sublattice_label_idxs[idx]
-                    if label not in current_labels:
-                        sublattice_idxs.append(idx)
-                        current_labels.add(label)
-                    if len(sublattice_idxs) == self.n_sublattices:
-                        break
-        # Sort idxs according to label order
-        sublattice_idxs = sorted(sublattice_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
-        return sublattice_idxs
+        best_subset = []
+        for r in range(2, len(idxs) + 1):
+            for subset in combinations(idxs, r):
+                subset_labels = {sublattice_labels[idx] for idx in subset}
+                if len(subset_labels) != len(subset):
+                    continue
+                r_ij_list = [
+                    np.linalg.norm(self.sites[i] - self.sites[j])
+                    for i, j in combinations(subset, 2)
+                ]
+                if not r_ij_list:
+                    continue
+                # Check if all distances are approximately equal
+                if all(np.isclose(r_ij_list[0], d, atol=tol*a) for d in r_ij_list):
+                    if len(subset) > len(best_subset):
+                        best_subset = list(subset)
+                    if len(best_subset) == self.n_sublattices:
+                        return best_subset
+        return best_subset
 
     def get_neighbour_idxs(self, idx):
         C = self.connectivity_matrix
@@ -198,14 +200,8 @@ class Geometry:
         i = bulk_idx
         for j in neighbour_idxs:
             r_ij = self.sites[i] - self.sites[j]
-            if location == "edge":
-                T_hat, T_norm = self.T_hat, self.T_norm
-                m_ij = np.dot(r_ij, T_hat) / T_norm  # translation count
-                dm_list.append(m_ij)
-                r_ij -= m_ij * self.T  # unwrap displacement
-            else:
-                dm_list.append(0)
             dr_list.append(r_ij)
+            dm_list.append(np.dot(r_ij, self.T_hat) if location == "edge" else 0)
         if type == "dict":
             dr_dict = {n: dr_list[i] for i, n in enumerate(neighbour_idxs)}
             dm_dict = {n: dm_list[i] for i, n in enumerate(neighbour_idxs)}
@@ -296,7 +292,7 @@ class Geometry:
                 # Plot with red color and larger size
                 ax.scatter(
                     highlight_coords[:, 0], highlight_coords[:, 1],
-                    color='red', s=40, edgecolors='black', linewidths=0.8,
+                    color='black', s=40, edgecolors='black', linewidths=0.8,
                     zorder=3, label = "SoI"
                 )
         ax.set_aspect('equal', adjustable='box')
