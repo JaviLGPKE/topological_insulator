@@ -21,10 +21,10 @@ class Problem:
             }
         }
     
-    def setup(self, N_r=10, N_k=200, location:str = "bulk"):
+    def setup(self, N_r=10, N_k=200, location:str = "bulk", BZ:str="reduced"):
         assert(N_r >= 10)
         # Model Options
-        self.model_options = ModelOptions(N_r, N_k, location)
+        self.model_options = ModelOptions(N_r, N_k, location, BZ)
         # Geometry
         self.geometry = Geometry(model_options=self.model_options, cell_parser=self.cell_parser)
         self.geometry.build_lattice()

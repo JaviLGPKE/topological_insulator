@@ -35,7 +35,7 @@ class Geometry:
         self._build_lattice(N_r, parser)
         self._set_connectivity(parser)
         self._build_brillouine_zone()
-        self.convex_hull = ConvexHull(self.sites)
+        # self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
     def _build_lattice(self, N_r, parser):
@@ -94,22 +94,32 @@ class Geometry:
         self.connectivity_matrix = C
 
     def _build_brillouine_zone(self):
-        # Reciprocal vectors
         N_k = self.N_k
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
-        area = a1[0]*a2[1] - a1[1]*a2[0]
-        self.b1 = b1 = (2*np.pi / area) * np.array([a2[1], -a2[0]])
-        self.b2 = b2 = (2*np.pi / area) * np.array([-a1[1], a1[0]])
-        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (
-            np.linspace(-np.pi/a, np.pi/a, N_k), np.linspace(-np.pi/a, np.pi/a, N_k))
+        factor = 2
+        # Bulk
+        if self.model_options.BZ == "reduced":
+            discretization = np.linspace(-np.pi/a, np.pi/a, N_k)
+        elif self.model_options.BZ == "extended":
+            discretization = np.linspace(-factor*np.pi/a, factor*np.pi/a, N_k)
+        else:
+            raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
+        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (discretization, discretization)
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
+        # Edge
         if self.model_options.location in ["edge", "both"]:
             T = a1 if a2[1] > a1[1] else a2
             self.T = T
             self.T_norm = T_norm = np.linalg.norm(T)
             self.T_hat = T/T_norm
-            self.k_edge = np.linspace(-np.pi/a, np.pi/(a), N_k)
+            if self.model_options.BZ == "reduced":
+                discretization_edge = np.linspace(-np.pi/(T_norm), np.pi/(T_norm), N_k)
+            elif self.model_options.BZ == "extended":
+                discretization_edge = np.linspace(-factor*np.pi/(T_norm), factor*np.pi/(T_norm), N_k)
+            else:
+                raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
+            self.k_edge = discretization_edge
 
         # TODO: Generate high-symmetry path for band structure
         # if self.model_options.band_structure:
@@ -139,7 +149,7 @@ class Geometry:
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
-            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/2, rtol=2.2e-1*a))[0]
+            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/3, rtol=2.2e-1*a))[0]
             y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=2.5e-1*a))[0]
             edge_idxs = np.intersect1d(x_idxs, y_idxs)
             candidate_edge_sites = edge_sites[edge_idxs]
@@ -165,6 +175,8 @@ class Geometry:
         for that index, this function finds the largest subset for which all pairwise distances
         are equal within a tolerance tol.
         """
+        # NOTE: Assumed that unit cell is composed of sublattice > 2
+        # FIXME: the unit cell is defined by the delta vectors in json!
         sublattice_labels = {
         idx: self.sublattice_labels[self.sublattice_label_idxs[idx]]
         for idx in idxs
@@ -236,6 +248,27 @@ class Geometry:
                     raise ValueError(f"Site {path} not found in self.sites")
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
+    
+    def _get_phase_idxs(self, dm_dict:dict, sublattice_idxs:list):
+        # get dict where key is bonded site and value is phase site
+        # 1. iterate of dm_dict if 
+        T = self.T
+        bond_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+        phase_dict = {}
+        for idx in bond_idxs:
+            m_ij = dm_dict[idx]
+            phase_site = self.sites[idx].copy()
+            if m_ij > 0: # left
+                phase_site += T
+            else: # right
+                phase_site -= T
+            phase_idx = np.where(
+                np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
+            if phase_idx not in dm_dict.keys():
+                phase_dict[idx] = None
+            else:
+                phase_dict[idx] = phase_idx
+        return phase_dict
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
         """

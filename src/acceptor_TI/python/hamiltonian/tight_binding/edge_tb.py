@@ -80,7 +80,6 @@ class TightBindingEdge(TightBinding):
 
     def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
         print(f"Calculating 'Edge' eigenvalues...")
-        self.geometry = geometry
         start = perf_counter()
         if H_type == "real_space":
             H = self.H
@@ -90,8 +89,8 @@ class TightBindingEdge(TightBinding):
             self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         elif H_type == "reciprocal_space":
             E_k_dict = {}
-            for counter, k in enumerate(geometry.k_edge):
-                H_k = self._fourier_transform(k, geometry.T_hat)
+            for k in geometry.k_edge:
+                H_k = self._fourier_transform(geometry, k)
                 E_k, _ = self._solve_eigenvalues(H_k)
                 E_k_dict[f"{k}"] = E_k
             self.E_k_dict = E_k_dict
@@ -100,7 +99,7 @@ class TightBindingEdge(TightBinding):
         print(f"'Edge' Eigenvalues - Done.")
         return perf_counter() - start
 
-    def _fourier_transform(self, k: np.ndarray, T_hat) -> np.ndarray:
+    def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
         N_projections = self.n_orbitals * self.n_spins
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
@@ -114,46 +113,31 @@ class TightBindingEdge(TightBinding):
                 continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
-            H_k_ij, C_k_ij = 0, 0
-            # Assume: if dot product abs value is equal, idxs are phases of each other
-            considered_idxs = self._get_mirror_idxs(site_dict_i["dm_dict"])
-            for idx_j in considered_idxs:
-                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
-                m_ij = site_dict_i["dm_dict"][idx_j]
-                if idx_j in self.sublattice_idxs:
-                    j = idx_map[idx_j]
-                    col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                    C_k_ij += 1
-                else: 
-                    bloch_phase = np.exp(1j * k * m_ij)
-                    H_ij *= bloch_phase
-                    C_k_ij += bloch_phase
-                H_k_ij += H_ij
-            C_k[i, j] = C_k_ij
-            H_k[row_slice, col_slice] = H_k_ij
-        return H_k
-    
-    def _get_mirror_idxs(self, dm_dict):
-        # FIXME: doesn't work for a sublattice that has no mirror, as it will take the others.
-        grouped_idxs = defaultdict(list)
-        for idx, value in dm_dict.items():
-            abs_value = np.abs(value)
-            found = False
-            for key in grouped_idxs:
-                if np.isclose(abs_value, key, rtol=1e-6):
-                    grouped_idxs[key].append(idx)
-                    found = True
-                    break
-            if not found:
-                grouped_idxs[abs_value].append(idx)
-        considered_idxs = [idxs for idxs in grouped_idxs.values() 
-                            if (len(idxs) > 1 or len(grouped_idxs.values()) == 1)][0]
-        return considered_idxs
+            # Iterate of bonds with corresponding phases
+            phase_dict = geometry._get_phase_idxs(site_dict_i["dm_dict"], self.sublattice_idxs)
+            for idx_j, phase_idx_j in phase_dict.items():
+                H_ij_k = site_dict_i["hopping_dict"][idx_j].copy()
+                C_ij_k = 1
+                if phase_idx_j is not None:
+                    H_ij = site_dict_i["hopping_dict"][phase_idx_j]
+                    m_ij = site_dict_i["dm_dict"][phase_idx_j]
+                    # T is equivalent to one basis vector, hence the translation will
+                    # correspond to 2 sublattices with equal labels
+                    bloch_phase =  np.exp(2j * k * m_ij) 
+                    H_ij_k += H_ij * bloch_phase
+                    C_ij_k += bloch_phase
+                j = idx_map[idx_j]
+                col_slice = slice(j * N_projections, (j + 1) * N_projections)
+                H_k[row_slice, col_slice] = H_ij_k
+                C_k[i, j] = C_ij_k
+        if self.model_options.solve_connectivity:
+            return C_k
+        else:
+            return H_k
 
     def plot_dispersion(self, geometry: Geometry) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
-        sort_idx = np.argsort(k_vals)
-        k_vals_sorted = k_vals#[sort_idx]
+        k_vals_sorted = k_vals
         E_list = []
         for key in sorted(self.E_k_dict, key=lambda x: float(x)):
             E_k = self.E_k_dict[key]

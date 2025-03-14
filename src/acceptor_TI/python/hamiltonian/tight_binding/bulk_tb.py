@@ -83,13 +83,15 @@ class TightBindingBulk(TightBinding):
 
     def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
         N_projections = self.n_orbitals * self.n_spins
-        dims = len(self.sublattice_idxs) * N_projections
+        N_sites = len(self.sublattice_idxs)
+        dims = N_sites * N_projections
+        C_k = np.zeroes(shape=(N_sites, N_sites))
         H_k = np.zeros(shape=(dims, dims), dtype=complex)
         for n, sublattice_dict in enumerate(self.sublattice_data_dict.values()):
             row_slice = slice(n * N_projections, (n + 1) * N_projections)
             for m, _ in enumerate(self.sublattice_data_dict.values()):
                 col_slice = slice(m * N_projections, (m + 1) * N_projections)
-                H_k_nm = 0
+                H_k_nm, C_k_nm = 0, 0
                 # Diagonal elements
                 if n == m:
                     continue
@@ -99,8 +101,13 @@ class TightBindingBulk(TightBinding):
                         r_ij = sublattice_dict["dr_dict"][idx_l]
                         bloch_phase = 1 if idx_l in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
                         H_k_nm += bloch_phase * sublattice_dict["hopping_dict"][idx_l]
+                        C_k_nm += bloch_phase
                 H_k[row_slice, col_slice] = H_k_nm
-        return H_k
+                C_k[n, m] = C_k_nm
+        if self.model_options.solve_connectivity:
+            return C_k
+        else:
+            return H_k
 
     def plot_dispersion(self, geometry: Geometry):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk

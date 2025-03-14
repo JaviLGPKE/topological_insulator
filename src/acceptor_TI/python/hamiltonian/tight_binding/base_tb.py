@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import linalg
 from sympy.physics.quantum.cg import CG
 import re
 from matplotlib import pyplot as plt
@@ -256,7 +257,7 @@ class TightBinding:
         raise NotImplementedError("'solve_eigenvalues' method not implemented")
 
     def _solve_eigenvalues(self, H):
-        E, U = np.linalg.eigh(H)
+        E, U = linalg.eigh(H, check_finite=False, driver="evr")
         return E, U
 
     def _visualise_matrix(self, M):
