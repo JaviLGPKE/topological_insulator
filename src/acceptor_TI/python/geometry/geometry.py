@@ -76,7 +76,7 @@ class Geometry:
         """
         sites = self.sites
         a = parser.lattice_constant.value
-        nn_factor = parser.lattice_constant.nn_factor
+        self.nn_factor = parser.lattice_constant.nn_factor
         N = len(sites)     
         C = np.zeros((N, N), dtype=int)
         for i in range(N):
@@ -88,10 +88,13 @@ class Geometry:
                     dist_sq += diff * diff
                 dist = np.sqrt(dist_sq)
                 # Nearest Neighbours
-                if abs(dist - (nn_factor * a)) < tol:
+                if abs(dist - (self.nn_factor * a)) < tol:
                     C[i, j] = 1
                     C[j, i] = 1
         self.connectivity_matrix = C
+
+    def get_label(self, idx):
+        return self.sublattice_labels[self.sublattice_label_idxs[idx]]
 
     def _build_brillouine_zone(self):
         N_k = self.N_k
@@ -249,25 +252,28 @@ class Geometry:
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
     
-    def _get_phase_idxs(self, dm_dict:dict, sublattice_idxs:list):
-        # get dict where key is bonded site and value is phase site
-        # 1. iterate of dm_dict if 
+    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
+        # FIXME: only works for 2 sublattices
         T = self.T
+        # nn_factor = self.nn_factor
+        # label_i = self.get_label(idx_i)
         bond_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         phase_dict = {}
-        for idx in bond_idxs:
-            m_ij = dm_dict[idx]
-            phase_site = self.sites[idx].copy()
-            if m_ij > 0: # left
+        for idx_j in bond_idxs:
+            m_ij = dm_dict[idx_j]
+            phase_site = self.sites[idx_j].copy()
+            # label_j = self.get_label(phase_idx_j)
+            if m_ij > 0: # left direction
                 phase_site += T
-            else: # right
+            else: # right direction
                 phase_site -= T
-            phase_idx = np.where(
+            phase_idx_j = np.where(
                 np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-            if phase_idx not in dm_dict.keys():
-                phase_dict[idx] = None
+            # phase_label_j = self.get_label(phase_idx_j)
+            if phase_idx_j not in dm_dict.keys():
+                phase_dict[idx_j] = None
             else:
-                phase_dict[idx] = phase_idx
+                phase_dict[idx_j] = phase_idx_j
         return phase_dict
 
     def plot_lattice(self, ax=None, sites_of_interest=None):

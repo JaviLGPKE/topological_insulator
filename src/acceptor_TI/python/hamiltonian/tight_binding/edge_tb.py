@@ -114,7 +114,8 @@ class TightBindingEdge(TightBinding):
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             # Iterate of bonds with corresponding phases
-            phase_dict = geometry._get_phase_idxs(site_dict_i["dm_dict"], self.sublattice_idxs)
+            phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
+            # embed()
             for idx_j, phase_idx_j in phase_dict.items():
                 H_ij_k = site_dict_i["hopping_dict"][idx_j].copy()
                 C_ij_k = 1
