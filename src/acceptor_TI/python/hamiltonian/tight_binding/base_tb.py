@@ -28,6 +28,8 @@ class TightBinding:
         self._clebsch_gordan()
         # Sublattice
         self.sublattice_data_dict = {}
+        self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
+        self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
 
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:

@@ -99,7 +99,7 @@ class TightBindingEdge(TightBinding):
         print(f"'Edge' Eigenvalues - Done.")
         return perf_counter() - start
 
-    def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
+    def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
         N_projections = self.n_orbitals * self.n_spins
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
@@ -115,7 +115,6 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             # Iterate of bonds with corresponding phases
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
-            # embed()
             for idx_j, phase_idx_j in phase_dict.items():
                 H_ij_k = site_dict_i["hopping_dict"][idx_j].copy()
                 C_ij_k = 1

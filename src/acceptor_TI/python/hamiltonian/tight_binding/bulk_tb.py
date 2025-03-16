@@ -38,12 +38,13 @@ class TightBindingBulk(TightBinding):
                 if idx_j not in idx_map:
                     continue
                 j = idx_map[idx_j]
-                sublattice_connectivity[i, j] = 1
-                sublattice_connectivity[j, i] = 1 # h.c
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
                 H_ij = sublattice_dict["hopping_dict"][idx_j]
-                H_ij = sublattice_dict["hopping_dict"][idx_j]
                 H[row_slice, col_slice] = H_ij
+                sublattice_connectivity[i, j] = 1
+                if idx_map not in self.sublattice_idxs: # h.c
+                    sublattice_connectivity[j, i] = 1 
+                    H[col_slice, row_slice] = H_ij.conj().T
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"'Bulk' Hamiltonian - Done.")
@@ -72,7 +73,7 @@ class TightBindingBulk(TightBinding):
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
                     k = np.array([k_x, k_y])
-                    H_k = self._fourier_transform(k)
+                    H_k = self._fourier_transform(geometry, k)
                     E_k, _ = self._solve_eigenvalues(H_k)
                     E_k_dict[f"[{k_x},{k_y}]"] = E_k
             self.E_k_dict = E_k_dict
@@ -81,33 +82,42 @@ class TightBindingBulk(TightBinding):
         print(f"'Bulk' Eigenvalues - Done.")
         return perf_counter() - start
 
-    def _fourier_transform(self, k: np.ndarray) -> np.ndarray:
+    def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
         N_projections = self.n_orbitals * self.n_spins
         N_sites = len(self.sublattice_idxs)
+        # Hamiltonian
         dims = N_sites * N_projections
-        C_k = np.zeroes(shape=(N_sites, N_sites))
+        C_k = np.zeros(shape=(N_sites, N_sites), dtype=complex)
         H_k = np.zeros(shape=(dims, dims), dtype=complex)
-        for n, sublattice_dict in enumerate(self.sublattice_data_dict.values()):
-            row_slice = slice(n * N_projections, (n + 1) * N_projections)
-            for m, _ in enumerate(self.sublattice_data_dict.values()):
-                col_slice = slice(m * N_projections, (m + 1) * N_projections)
-                H_k_nm, C_k_nm = 0, 0
+        for i in range(N_sites):
+            sublattice_i_label = geometry.label_mapper[i]
+            row_slice = slice(i * N_projections, (i + 1) * N_projections)
+            data = self.sublattice_data_dict[sublattice_i_label]
+            sublattice_dict = self.get_sublattice_dict(geometry, N_sites, data, k)
+            for j in range(N_sites):
+                sublattice_j_label = geometry.label_mapper[j]
+                col_slice = slice(j * N_projections, (j + 1) * N_projections)
                 # Diagonal elements
-                if n == m:
+                if i == j:
                     continue
                 # Off-diagonal elements
-                else:
-                    for idx_l in sublattice_dict["neighbour_idxs"]:
-                        r_ij = sublattice_dict["dr_dict"][idx_l]
-                        bloch_phase = 1 if idx_l in self.sublattice_idxs else np.exp(1j * np.dot(k, r_ij))
-                        H_k_nm += bloch_phase * sublattice_dict["hopping_dict"][idx_l]
-                        C_k_nm += bloch_phase
-                H_k[row_slice, col_slice] = H_k_nm
-                C_k[n, m] = C_k_nm
+                H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
+                C_k[i, j] = sublattice_dict[sublattice_j_label]["C_k_ij"]
         if self.model_options.solve_connectivity:
             return C_k
         else:
             return H_k
+    
+    def get_sublattice_dict(self, geometry, N_sites, data, k):
+        sublattice_dict = {geometry.label_mapper[n]: {
+                "C_k_ij":0, "H_k_ij": 0} for n in range(N_sites)}
+        for idx_j in data["neighbour_idxs"]:
+            idx_label = geometry.get_label(idx_j)
+            r_ij, H_ij = data["dr_dict"][idx_j].copy(), data["hopping_dict"][idx_j].copy()
+            bloch_phase = np.exp(1j * np.dot(k, r_ij))
+            sublattice_dict[idx_label]["C_k_ij"] += bloch_phase
+            sublattice_dict[idx_label]["H_k_ij"] += bloch_phase * H_ij
+        return sublattice_dict
 
     def plot_dispersion(self, geometry: Geometry):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk

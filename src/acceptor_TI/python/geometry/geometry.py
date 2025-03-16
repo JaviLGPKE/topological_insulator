@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.spatial import ConvexHull
 from itertools import combinations
+from collections import defaultdict
 
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser
@@ -15,6 +16,7 @@ class Geometry:
         self.n_dim = cell_parser.general.dimensions.value
         self.n_sublattices = len(cell_parser.geometry.delta_vectors.value)
         self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
+        self.label_mapper = {idx: label for idx, label in enumerate(self.sublattice_labels)}
 
     def build_lattice(self) -> None:
         """
@@ -147,8 +149,8 @@ class Geometry:
         x_max, y_max = max(sites[:, 0]), max(sites[:, 1])
         x_min, y_min = min(sites[:, 0]), min(sites[:, 1])
         if location == "bulk":
-            x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=1e-1*a))[0]
-            y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=1e-1*a))[0]
+            x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=2e-1*a))[0]
+            y_idxs = np.where(np.isclose(sites[:, 1], 0, rtol=2e-1*a))[0]
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
@@ -253,27 +255,41 @@ class Geometry:
         return sublattices_considered
     
     def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
-        # FIXME: only works for 2 sublattices
+        # FIXME: Implement class that considers case by case?
         T = self.T
-        # nn_factor = self.nn_factor
-        # label_i = self.get_label(idx_i)
-        bond_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+        unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+        bond_idxs = [idx for idx in dm_dict.keys()]
+        n_bonds = len(bond_idxs)
         phase_dict = {}
-        for idx_j in bond_idxs:
-            m_ij = dm_dict[idx_j]
-            phase_site = self.sites[idx_j].copy()
-            # label_j = self.get_label(phase_idx_j)
-            if m_ij > 0: # left direction
-                phase_site += T
-            else: # right direction
-                phase_site -= T
-            phase_idx_j = np.where(
-                np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-            # phase_label_j = self.get_label(phase_idx_j)
-            if phase_idx_j not in dm_dict.keys():
-                phase_dict[idx_j] = None
-            else:
-                phase_dict[idx_j] = phase_idx_j
+        if self.get_label(idx_i) != "C":
+            unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+            for idx_j in unit_cell_idxs:
+                m_ij = dm_dict[idx_j]
+                phase_site = self.sites[idx_j].copy()
+                if m_ij > 0: # left direction
+                    phase_site += T
+                else: # right direction
+                    phase_site -= T
+                phase_idx_j = np.where(
+                    np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
+                if phase_idx_j not in dm_dict.keys():
+                    phase_dict[idx_j] = None
+                else:
+                    phase_dict[idx_j] = phase_idx_j
+        else:
+            label_groups = defaultdict(list)
+            for idx in dm_dict.keys():
+                label = self.get_label(idx)
+                label_groups[label].append(idx)
+            for indices in label_groups.values():
+                if len(indices) == 2:
+                    # Ensure that the key index is in self.sublattice_idxs
+                    if indices[0] in sublattice_idxs:
+                        phase_dict[indices[0]] = indices[1]
+                    elif indices[1] in sublattice_idxs:
+                        phase_dict[indices[1]] = indices[0] 
+                else:
+                    raise NotImplementedError("Not Implemented!")
         return phase_dict
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
