@@ -1,2 +1,2 @@
-from .tight_binding import TightBinding
+from .tight_binding import TightBinding, TightBindingBulk, TightBindingEdge 
 from .wavefunction import WaveFunction
