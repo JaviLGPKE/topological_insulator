@@ -46,6 +46,8 @@ class Geometry:
         self.a1, self.a2 = a1, a2 = (np.array(lattice_vectors[0]), 
                                      np.array(lattice_vectors[1]))
         delta_vectors = parser.delta_vectors.value
+        for n, d in enumerate(delta_vectors):
+            setattr(self, f"d_{n+1}", np.array(d))
         # Build lattice
         sites, edge_sites, sublattice_label = [], [], []
         site_index = 0
@@ -78,7 +80,6 @@ class Geometry:
         """
         sites = self.sites
         a = parser.lattice_constant.value
-        self.nn_factor = parser.lattice_constant.nn_factor
         N = len(sites)     
         C = np.zeros((N, N), dtype=int)
         for i in range(N):
@@ -90,7 +91,7 @@ class Geometry:
                     dist_sq += diff * diff
                 dist = np.sqrt(dist_sq)
                 # Nearest Neighbours
-                if abs(dist - (self.nn_factor * a)) < tol:
+                if abs(dist - a) < tol:
                     C[i, j] = 1
                     C[j, i] = 1
         self.connectivity_matrix = C
@@ -150,7 +151,7 @@ class Geometry:
         x_min, y_min = min(sites[:, 0]), min(sites[:, 1])
         if location == "bulk":
             x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=2e-1*a))[0]
-            y_idxs = np.where(np.isclose(sites[:, 1], 0, rtol=2e-1*a))[0]
+            y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=2e-1*a))[0]
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
