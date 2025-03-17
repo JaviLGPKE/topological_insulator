@@ -28,8 +28,8 @@
         }, "type":"dict", "constant": true,"unit": "eV"}
     },
   "geometry": {
-    "lattice_constant": {"value": 1, "nn_factor": 0.5, "space":"position"},
-    "lattice_vectors": {"value": [["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"},
-    "delta_vectors": {"value": [["0", "0"], ["1/2", "0"], ["1/4", "pow(3, 0.5)/4"]], "space": "position"}
+    "lattice_constant": {"value": 1, "space":"position"},
+    "lattice_vectors": {"value": [["2", "0"], ["1", "pow(3, 0.5)"]], "space": "position"},
+    "delta_vectors": {"value": [["0", "0"], ["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"}
   }
 }
