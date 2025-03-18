@@ -57,10 +57,9 @@ class TightBindingEdge(TightBinding):
         self.edge_idxs = edge_idxs = geometry.get_sublattice_idxs(self.location)
         sites = geometry.sites
         a1, a2 = geometry.a1, geometry.a2 
-        T_p = a1 if a2[1] < a1[1] else a2
-        # T_p[0] *= 1 # y-axis reflection
         # NOTE: Start from the bottom edge, so we need to go backwards
         # along the opposite direction of the descending basis vector
+        T_p = a1 if a2[1] < a1[1] else a2
         sublattice_idxs = []
         sublattice_data_dict = {}
         for i, idx in enumerate(edge_idxs):
@@ -100,6 +99,7 @@ class TightBindingEdge(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
+        a = geometry.lattice_constant
         N_projections = self.n_orbitals * self.n_spins
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
@@ -121,8 +121,6 @@ class TightBindingEdge(TightBinding):
                 if phase_idx_j is not None:
                     H_ij = site_dict_i["hopping_dict"][phase_idx_j]
                     m_ij = site_dict_i["dm_dict"][phase_idx_j]
-                    # T is equivalent to one basis vector, hence the translation will
-                    # correspond to 2 sublattices with equal labels
                     bloch_phase =  np.exp(2j * k * m_ij) 
                     H_ij_k += H_ij * bloch_phase
                     C_ij_k += bloch_phase

@@ -1,4 +1,5 @@
 import numpy as np
+
 from matplotlib import pyplot as plt
 from scipy.spatial import ConvexHull
 from itertools import combinations
@@ -10,6 +11,7 @@ from ..cell_parser import CellParser
 from IPython import embed
 class Geometry:
     def __init__(self, model_options:ModelOptions, cell_parser:CellParser):
+        # Setup
         self.model_options = model_options
         self.cell_parser = cell_parser
         self.name = cell_parser.general.name.value
@@ -17,6 +19,15 @@ class Geometry:
         self.n_sublattices = len(cell_parser.geometry.delta_vectors.value)
         self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
         self.label_mapper = {idx: label for idx, label in enumerate(self.sublattice_labels)}
+        self.idx_mapper = {label: idx for idx, label in enumerate(self.sublattice_labels)}
+        # Vectors
+        parser = self.cell_parser.geometry
+        self.lattice_constant = a = parser.lattice_constant.value
+        lattice_vectors = parser.lattice_vectors.value
+        self.a1, self.a2 = a * np.array(lattice_vectors[0]), a * np.array(lattice_vectors[1])
+        self.delta_vectors = a * np.array(parser.delta_vectors.value)
+        for n, d in enumerate(self.delta_vectors):
+            setattr(self, f"d_{n+1}", np.array(d))
 
     def build_lattice(self) -> None:
         """
@@ -29,33 +40,28 @@ class Geometry:
         """
         self.N_r = N_r = self.model_options.N_r
         self.N_k = self.model_options.N_k
+
         parser = self.cell_parser.geometry
         lattice_vectors = parser.lattice_vectors.value
         assert(len(lattice_vectors[0]) == self.n_dim)
 
         print(f"Building Geometry...")
-        self._build_lattice(N_r, parser)
-        self._set_connectivity(parser)
+        self._build_lattice(N_r)
+        self._set_connectivity()
         self._build_brillouine_zone()
         # self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
-    def _build_lattice(self, N_r, parser):
-        self.lattice_constant = a = parser.lattice_constant.value
-        lattice_vectors = parser.lattice_vectors.value
-        self.a1, self.a2 = a1, a2 = (np.array(lattice_vectors[0]), 
-                                     np.array(lattice_vectors[1]))
-        delta_vectors = parser.delta_vectors.value
-        for n, d in enumerate(delta_vectors):
-            setattr(self, f"d_{n+1}", np.array(d))
+    def _build_lattice(self, N_r):
+        a1, a2 = self.a1, self.a2
         # Build lattice
         sites, edge_sites, sublattice_label = [], [], []
         site_index = 0
         for i in range(N_r):
             for j in range(N_r):
-                for s, delta in enumerate(delta_vectors):
-                    x = (i * a1[0] + j * a2[0] + delta[0]) * a
-                    y = (i * a1[1] + j * a2[1] + delta[1]) * a
+                for s, d in enumerate(self.delta_vectors):
+                    x = (i * a1[0] + j * a2[0] + d[0])
+                    y = (i * a1[1] + j * a2[1] + d[1])
                     site = [x, y]
                     sites.append(site)
                     if i == 0 or i == N_r - 1 or j == 0 or j == N_r - 1:
@@ -66,7 +72,7 @@ class Geometry:
         self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
         self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
 
-    def _set_connectivity(self, parser, tol=1e-12) -> None:
+    def _set_connectivity(self, tol=1e-12) -> None:
         """
         Sets the connectivity matrix based on whether the distance between two sites
         is within 'reference_dist'.
@@ -79,7 +85,7 @@ class Geometry:
             Tolerance for considering distances as equal to 'reference_dist'.
         """
         sites = self.sites
-        a = parser.lattice_constant.value
+        a = self.lattice_constant
         N = len(sites)     
         C = np.zeros((N, N), dtype=int)
         for i in range(N):
@@ -93,7 +99,7 @@ class Geometry:
                 # Nearest Neighbours
                 if abs(dist - a) < tol:
                     C[i, j] = 1
-                    C[j, i] = 1
+                    C[j, i] = 1 # h.c.
         self.connectivity_matrix = C
 
     def get_label(self, idx):
@@ -145,7 +151,6 @@ class Geometry:
 
     def get_location_idx(self, location:str):
         a = self.lattice_constant
-        sublattices = [0]
         sites = self.sites
         x_max, y_max = max(sites[:, 0]), max(sites[:, 1])
         x_min, y_min = min(sites[:, 0]), min(sites[:, 1])
@@ -162,51 +167,26 @@ class Geometry:
             idx_candidates = [np.where((sites == candidate).all(axis=1))[0][0] for candidate in candidate_edge_sites]
         else: 
             raise ValueError(f"Location '{location}' not available")
-        chosen_idxs = [c for c in idx_candidates if self.sublattice_label_idxs[c] in sublattices]
+        chosen_idxs = [c for c in idx_candidates if self.sublattice_label_idxs[c] == 0]
         return chosen_idxs[0]
 
     def get_sublattice_idxs(self, location: str):
-        # Get the index for the chosen site and store it as an attribute
         chosen_idx = self.get_location_idx(location)
         setattr(self, f"{location}_idx", chosen_idx)
-        neighbour_idxs = self.get_neighbour_idxs(chosen_idx)
-        candidate_idxs = list(neighbour_idxs)
-        candidate_idxs.append(chosen_idx)
-        unit_cell_idxs = self._find_unit_cell(candidate_idxs)
+        unit_cell_idxs = self._find_unit_cell(chosen_idx)
         return sorted(unit_cell_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
 
-    def _find_unit_cell(self, idxs, tol=1e-5):
-        """
-        Given a list of indices and a function get_coord(idx) that returns the coordinates
-        for that index, this function finds the largest subset for which all pairwise distances
-        are equal within a tolerance tol.
-        """
-        # NOTE: Assumed that unit cell is composed of sublattice > 2
-        # FIXME: the unit cell is defined by the delta vectors in json!
-        sublattice_labels = {
-        idx: self.sublattice_labels[self.sublattice_label_idxs[idx]]
-        for idx in idxs
-        }
-        a = self.lattice_constant
-        best_subset = []
-        for r in range(2, len(idxs) + 1):
-            for subset in combinations(idxs, r):
-                subset_labels = {sublattice_labels[idx] for idx in subset}
-                if len(subset_labels) != len(subset):
-                    continue
-                r_ij_list = [
-                    np.linalg.norm(self.sites[i] - self.sites[j])
-                    for i, j in combinations(subset, 2)
-                ]
-                if not r_ij_list:
-                    continue
-                # Check if all distances are approximately equal
-                if all(np.isclose(r_ij_list[0], d, atol=tol*a) for d in r_ij_list):
-                    if len(subset) > len(best_subset):
-                        best_subset = list(subset)
-                    if len(best_subset) == self.n_sublattices:
-                        return best_subset
-        return best_subset
+    def _find_unit_cell(self, sub_A_idx, tol=1e-5):
+        unit_cell = [sub_A_idx]
+        for n, d in enumerate(self.delta_vectors):
+            if n == 0:
+                # 1st delta vector corresponds to [0, 0], equivalent to sublattice A
+                continue 
+            site = self.sites[sub_A_idx].copy() + d
+            idx = np.where(np.all(np.isclose(self.sites, site, atol=1e-8), axis=1))[0][0]
+            unit_cell.append(idx)
+        assert(len(unit_cell) == self.n_sublattices)
+        return unit_cell
 
     def get_neighbour_idxs(self, idx):
         C = self.connectivity_matrix
@@ -256,14 +236,20 @@ class Geometry:
         return sublattices_considered
     
     def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
-        # FIXME: Implement class that considers case by case?
-        T = self.T
+        # FIXME: Not general enough for every case
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
-        bond_idxs = [idx for idx in dm_dict.keys()]
-        n_bonds = len(bond_idxs)
+        non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         phase_dict = {}
-        if self.get_label(idx_i) != "C":
-            unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+        if self.n_sublattices >= 3:
+            for m, idx_j in enumerate(unit_cell_idxs):
+                bond_label = self.get_label(idx_j)
+                corresponding_idx = next((idx for idx in non_unit_cell_idxs if self.get_label(idx) == bond_label), None)
+                if corresponding_idx is not None:
+                    phase_dict[idx_j] = corresponding_idx
+                else:
+                    phase_dict[idx_j] = None
+        elif self.n_sublattices == 2:
+            T = self.T
             for idx_j in unit_cell_idxs:
                 m_ij = dm_dict[idx_j]
                 phase_site = self.sites[idx_j].copy()
@@ -278,19 +264,7 @@ class Geometry:
                 else:
                     phase_dict[idx_j] = phase_idx_j
         else:
-            label_groups = defaultdict(list)
-            for idx in dm_dict.keys():
-                label = self.get_label(idx)
-                label_groups[label].append(idx)
-            for indices in label_groups.values():
-                if len(indices) == 2:
-                    # Ensure that the key index is in self.sublattice_idxs
-                    if indices[0] in sublattice_idxs:
-                        phase_dict[indices[0]] = indices[1]
-                    elif indices[1] in sublattice_idxs:
-                        phase_dict[indices[1]] = indices[0] 
-                else:
-                    raise NotImplementedError("Not Implemented!")
+            raise NotImplementedError("Not Implemented!")
         return phase_dict
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
