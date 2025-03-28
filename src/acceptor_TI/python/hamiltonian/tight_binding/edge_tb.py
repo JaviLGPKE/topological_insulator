@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
 from collections import defaultdict
+from scipy import linalg
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -108,29 +109,30 @@ class TightBindingEdge(TightBinding):
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(self.sublattice_idxs)}
         for idx_i in self.sublattice_idxs:
-            site_dict_i = self.site_data_dict[idx_i]
-            if idx_i not in idx_map:
-                continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             # Iterate of bonds with corresponding phases
+            site_dict_i = self.site_data_dict[idx_i]
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
             for idx_j, phase_idx_j in phase_dict.items():
-                H_ij_k = site_dict_i["hopping_dict"][idx_j].copy()
-                C_ij_k = 1
-                if phase_idx_j is not None:
-                    H_ij = site_dict_i["hopping_dict"][phase_idx_j]
-                    m_ij = site_dict_i["dm_dict"][phase_idx_j]
-                    bloch_phase =  np.exp(2j * k * m_ij) 
-                    H_ij_k += H_ij * bloch_phase
-                    C_ij_k += bloch_phase
                 j = idx_map[idx_j]
-                col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                H_k[row_slice, col_slice] = H_ij_k
+                # col_slice = slice(j * N_projections, (j + 1) * N_projections)
+                m_ij = site_dict_i["dm_dict"][idx_j]
+                bloch_phase =  np.exp(1j * k * m_ij) 
+                # H_ij_k = bloch_phase * site_dict_i["hopping_dict"][idx_j].copy()
+                C_ij_k = bloch_phase
+                if phase_idx_j is not None:
+                    m_ij = site_dict_i["dm_dict"][phase_idx_j]
+                    bloch_phase =  np.exp(1j * k * m_ij) 
+                    # H_ij_k += site_dict_i["hopping_dict"][phase_idx_j].copy() * bloch_phase
+                    C_ij_k += bloch_phase
+                # H_k[row_slice, col_slice] = H_ij_k
                 C_k[i, j] = C_ij_k
         if self.model_options.solve_connectivity:
+            # assert(linalg.ishermitian(C_k, atol=1e-3))
             return C_k
         else:
+            # assert(linalg.ishermitian(H_k, atol=1e-3))
             return H_k
 
     def plot_dispersion(self, geometry: Geometry) -> None:

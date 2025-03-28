@@ -9,6 +9,8 @@ from ...model_options import ModelOptions
 from ...cell_parser import CellParser
 from ...geometry import Geometry
 
+#TODO: 4 states for j = 1.5 and 2 states for j = 0.5, add the SO coupling j = 1.5
+
 class TightBinding:
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
@@ -19,12 +21,14 @@ class TightBinding:
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
+        # Spin
+        self.n_spins = 2
         # Orbitals
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
+        self.n_orbitals = len(self.orbitals)
         self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
-        self.n_spins = 2
-        self.n_orbitals = 4
+        # Clebsch-Gordan Coefficients
         self._clebsch_gordan()
         # Sublattice
         self.sublattice_data_dict = {}
@@ -115,8 +119,7 @@ class TightBinding:
             raise ValueError("State string format is incorrect.")
 
     def get_hopping_info(self, neighbour_idxs, directional_cosines):
-        H_i = {}
-        coupled_states_i = {}
+        H_i, coupled_states_i = {}, {}
         for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
             j = neighbour_idx
             state_hoppings = self._slater_koster(cosines)
@@ -226,6 +229,8 @@ class TightBinding:
                 t_nm = 0
                 for bra_orb, bra_coeff in bra_orbitals.items():
                     for ket_orb, ket_coeff in ket_orbitals.items():
+                        if (bra_orb not in self.orbitals) or (ket_orb not in self.orbitals):
+                            continue
                         hopping_key = f"|{bra_orb}><{ket_orb}|"
                         t_hop = state_hoppings[hopping_key]
                         t_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * t_hop

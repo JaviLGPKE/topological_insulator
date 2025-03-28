@@ -1,3 +1,4 @@
+import scipy.linalg
 from acceptor_TI import Problem
 
 data_path = "../../../acceptor_TI/data/"
@@ -13,7 +14,7 @@ problem = Problem(data_path=data_path, file_name=file_name)
 
 location = "edge"
 problem.setup(
-    N_r = 10,
+    N_r = 11,
     N_k = 200, 
     location = location,
     BZ = "reduced"
@@ -31,6 +32,8 @@ problem.run(
 
 # problem.plot(plot_type="dispersion", location=location)
 
-k = g.k_edge[int(g.N_k/2) - 1]
-H_k = tb._fourier_transform(g, k)
-tb._visualise_matrix(H_k)
+# import scipy
+# k = g.k_edge[5]
+# H_k = tb._fourier_transform(g, k)
+# print()
+# tb._visualise_matrix(H_k)
