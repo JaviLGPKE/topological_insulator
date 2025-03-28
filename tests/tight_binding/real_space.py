@@ -5,11 +5,11 @@ file_name = "honeycomb.json"
 
 problem = Problem(data_path=data_path, file_name=file_name)
 
-hopping_dict = problem.cell_parser.eigenvalues.nn_hopping.value
-hopping_dict["t_ss_sigma"] = -1.4
-hopping_dict["t_sp_sigma"] = 1
-hopping_dict["t_pp_sigma"] = 2
-hopping_dict["t_pp_pi"] = -3
+# hopping_dict = problem.cell_parser.eigenvalues.nn_hopping.value
+# hopping_dict["t_ss_sigma"] = -1.4
+# hopping_dict["t_sp_sigma"] = 1
+# hopping_dict["t_pp_sigma"] = 2
+# hopping_dict["t_pp_pi"] = -3
 
 problem.setup(
     N_r = 10,
