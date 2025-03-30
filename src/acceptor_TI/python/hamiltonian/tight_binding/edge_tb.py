@@ -80,7 +80,7 @@ class TightBindingEdge(TightBinding):
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
 
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+    def solve_eigenvalues(self, geometry:Geometry, H_type:str):
         print(f"Calculating 'Edge' eigenvalues...")
         start = perf_counter()
         if H_type == "real_space":

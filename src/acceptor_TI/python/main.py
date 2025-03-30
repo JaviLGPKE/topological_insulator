@@ -38,21 +38,16 @@ class Problem:
                 model_options=self.model_options, cell_parser=self.cell_parser)
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.build_hamiltonian(geometry=self.geometry)
-            # WaveFunction
+            # TODO: WaveFunction
             # wavefunction = WaveFunction(cell_parser=self.cell_parser)
             # self.Hamiltonian[location]["wavefunction"] = wavefunction.build_wavefunction()
     
-    def run(self, acceptor:bool = False, H_type="real_space"):
-        if acceptor:
-            # TODO: implement through cell_parser
-            # self.geometry.update_geometry() 
-            # self.tight_biding.update_data() 
-            ValueError("Acceptor case not implemented!")
+    def run(self, H_type="real_space"):
         for key in self.hamiltonian.keys():
             if self.model_options.location not in [key, "both"]:
                 continue
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
-            tight_binding.solve_eigenvalues(self.geometry, acceptor, H_type)
+            tight_binding.solve_eigenvalues(self.geometry, H_type)
     
     def plot(self, plot_type="lattice", location:str=None):
         if plot_type == "lattice":

@@ -274,7 +274,7 @@ class TightBinding:
         return H_ij
 
     @abstractmethod
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+    def solve_eigenvalues(self, geometry:Geometry, H_type:str):
         """
         Must calculate the necessary eigenvalues depending on the requested 
         Hamiltonian type.

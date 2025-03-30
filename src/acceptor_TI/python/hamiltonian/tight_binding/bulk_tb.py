@@ -60,7 +60,7 @@ class TightBindingBulk(TightBinding):
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
 
-    def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
+    def solve_eigenvalues(self, geometry:Geometry, H_type:str):
         tol = 1e-12 * geometry.lattice_constant
         print(f"Calculating 'Bulk' eigenvalues...")
         start = perf_counter()
@@ -99,12 +99,6 @@ class TightBindingBulk(TightBinding):
             for j in range(N_sites):
                 sublattice_j_label = geometry.label_mapper[j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                # # Diagonal elements
-                # if i == j:
-                #     H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
-                #     C_k[i, j] = sublattice_dict[sublattice_j_label]["C_k_ij"]
-                # # Off-diagonal elements
-                # else:
                 H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
                 C_k[i, j] = sublattice_dict[sublattice_j_label]["C_k_ij"]
         if self.model_options.solve_connectivity:
