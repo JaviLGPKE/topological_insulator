@@ -6,7 +6,7 @@ file_name = "honeycomb.json"
 
 problem = Problem(data_path=data_path, file_name=file_name)
 
-location = "edge"
+location = "bulk"
 problem.setup(
     N_r = 10,
     N_k = 200, 

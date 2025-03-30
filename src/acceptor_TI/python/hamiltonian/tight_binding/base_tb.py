@@ -138,25 +138,24 @@ class TightBinding:
         else:
             raise ValueError("State string format is incorrect.")
 
-    def get_hamiltonian_submatrix(self, geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hppping"):
+    def get_hamiltonian_submatrix(self, geometry:Geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hppping"):
         label_i = geometry.get_label(idx)
-        H_i, coupled_states_i = {}, {}
-        for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
-            j = neighbour_idx
-            label_j = geometry.get_label(j)
-            eigenvalue_dict = self.get_eigenvalue_dict(eigenvalue_type, label_i, label_j, cosines)
-            H_ij = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
-            H_i[j] = H_ij
-            coupled_states_i[j] = eigenvalue_dict
-        return H_i
-
-    def get_eigenvalue_dict(self, eigenvalue_type, label_i, label_j, cosines):
+        H_i = {}
         if eigenvalue_type == "hopping":
-            return self._slater_koster_hoppings(label_i, label_j, cosines)
+            for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
+                j = neighbour_idx
+                label_j = geometry.get_label(j)
+                eigenvalue_dict = self._slater_koster_hoppings(label_i, label_j, cosines)
+                H_ij = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
+                H_i[j] = H_ij
         elif eigenvalue_type == "spin_orbit_coupling":
-            return self._spin_orbit_coupling(label_i) 
+            i = idx
+            eigenvalue_dict = self._spin_orbit_coupling(label_i) 
+            H_ii = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
+            H_i[i] = H_ii
         else:
-            raise ValueError(f"'{eigenvalue_type}' not implemented!")     
+            raise ValueError(f"'{eigenvalue_type}' not implemented!")  
+        return H_i    
 
     def _slater_koster_hoppings(self, label_i, label_j, cosines):
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)

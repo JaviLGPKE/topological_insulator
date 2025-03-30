@@ -38,13 +38,14 @@ class TightBindingEdge(TightBinding):
                     continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
+            H_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            H[row_slice, row_slice] = H_ii
             for idx_j in site_dict_i["neighbour_idxs"]:
                 if idx_j not in idx_map:
                     continue
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                t_ij, s_ij = site_dict_i["hopping_dict"][idx_j].copy(), site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
-                H_ij = t_ij + s_ij
+                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
                 sublattice_connectivity[i, j] = 1
                 H[row_slice, col_slice] = H_ij 
                 # h.c. 
@@ -114,25 +115,24 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
+            H_k_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            H_k[row_slice, row_slice] = H_k_ii # Diagonal
             for idx_j, idx_j_phase in phase_dict.items():
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
                 m_ij = site_dict_i["dm_dict"][idx_j]
-                t_ij, s_ij = site_dict_i["hopping_dict"][idx_j].copy(), site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
-                H_ij = t_ij + s_ij
+                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
                 bloch_phase =  np.exp(1j * k * m_ij)
                 H_k_ij = bloch_phase * H_ij
                 C_k_ij = bloch_phase
                 # Bond Phase
                 if idx_j_phase is not None:
                     m_ij_phase = site_dict_i["dm_dict"][idx_j_phase]
-                    t_ij_phase, s_ij_phase = (
-                        site_dict_i["hopping_dict"][idx_j_phase].copy(), site_dict_i["spin_orbit_coupling_dict"][idx_j_phase].copy())
-                    H_ij_phase = t_ij_phase + s_ij_phase
+                    H_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
                     bloch_phase =  np.exp(1j * k * m_ij_phase) 
                     H_k_ij += bloch_phase * H_ij_phase
                     C_k_ij += bloch_phase
-                H_k[row_slice, col_slice] = H_k_ij
+                H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
                 C_k[i, j] = C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
