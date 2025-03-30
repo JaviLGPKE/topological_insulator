@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
 from collections import defaultdict
+from scipy import linalg
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -37,12 +38,14 @@ class TightBindingEdge(TightBinding):
                     continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
+            H_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            H[row_slice, row_slice] = H_ii
             for idx_j in site_dict_i["neighbour_idxs"]:
                 if idx_j not in idx_map:
                     continue
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                H_ij = site_dict_i["hopping_dict"][idx_j]
+                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
                 sublattice_connectivity[i, j] = 1
                 H[row_slice, col_slice] = H_ij 
                 # h.c. 
@@ -57,10 +60,9 @@ class TightBindingEdge(TightBinding):
         self.edge_idxs = edge_idxs = geometry.get_sublattice_idxs(self.location)
         sites = geometry.sites
         a1, a2 = geometry.a1, geometry.a2 
-        T_p = a1 if a2[1] < a1[1] else a2
-        # T_p[0] *= 1 # y-axis reflection
         # NOTE: Start from the bottom edge, so we need to go backwards
         # along the opposite direction of the descending basis vector
+        T_p = a1 if a2[1] < a1[1] else a2
         sublattice_idxs = []
         sublattice_data_dict = {}
         for i, idx in enumerate(edge_idxs):
@@ -100,6 +102,7 @@ class TightBindingEdge(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
+        a = geometry.lattice_constant
         N_projections = self.n_orbitals * self.n_spins
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
@@ -108,28 +111,29 @@ class TightBindingEdge(TightBinding):
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(self.sublattice_idxs)}
         for idx_i in self.sublattice_idxs:
-            site_dict_i = self.site_data_dict[idx_i]
-            if idx_i not in idx_map:
-                continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
-            # Iterate of bonds with corresponding phases
+            site_dict_i = self.site_data_dict[idx_i]
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
-            for idx_j, phase_idx_j in phase_dict.items():
-                H_ij_k = site_dict_i["hopping_dict"][idx_j].copy()
-                C_ij_k = 1
-                if phase_idx_j is not None:
-                    H_ij = site_dict_i["hopping_dict"][phase_idx_j]
-                    m_ij = site_dict_i["dm_dict"][phase_idx_j]
-                    # T is equivalent to one basis vector, hence the translation will
-                    # correspond to 2 sublattices with equal labels
-                    bloch_phase =  np.exp(2j * k * m_ij) 
-                    H_ij_k += H_ij * bloch_phase
-                    C_ij_k += bloch_phase
+            H_k_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            H_k[row_slice, row_slice] = H_k_ii # Diagonal
+            for idx_j, idx_j_phase in phase_dict.items():
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                H_k[row_slice, col_slice] = H_ij_k
-                C_k[i, j] = C_ij_k
+                m_ij = site_dict_i["dm_dict"][idx_j]
+                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
+                bloch_phase =  np.exp(1j * k * m_ij)
+                H_k_ij = bloch_phase * H_ij
+                C_k_ij = bloch_phase
+                # Bond Phase
+                if idx_j_phase is not None:
+                    m_ij_phase = site_dict_i["dm_dict"][idx_j_phase]
+                    H_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
+                    bloch_phase =  np.exp(1j * k * m_ij_phase) 
+                    H_k_ij += bloch_phase * H_ij_phase
+                    C_k_ij += bloch_phase
+                H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
+                C_k[i, j] = C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
         else:

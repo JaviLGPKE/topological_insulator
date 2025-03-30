@@ -34,6 +34,8 @@ class TightBindingBulk(TightBinding):
                 continue
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
+            H_ii = sublattice_dict["spin_orbit_coupling_dict"][idx_i].copy()
+            H[row_slice, row_slice] = H_ii
             for idx_j in sublattice_dict["neighbour_idxs"]:
                 if idx_j not in idx_map:
                     continue
@@ -43,8 +45,8 @@ class TightBindingBulk(TightBinding):
                 H[row_slice, col_slice] = H_ij
                 sublattice_connectivity[i, j] = 1
                 if idx_map not in self.sublattice_idxs: # h.c
-                    sublattice_connectivity[j, i] = 1 
                     H[col_slice, row_slice] = H_ij.conj().T
+                    sublattice_connectivity[j, i] = 1 
         self.sublattice_connectivity = sublattice_connectivity
         self.H = H
         print(f"'Bulk' Hamiltonian - Done.")
@@ -97,10 +99,12 @@ class TightBindingBulk(TightBinding):
             for j in range(N_sites):
                 sublattice_j_label = geometry.label_mapper[j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                # Diagonal elements
-                if i == j:
-                    continue
-                # Off-diagonal elements
+                # # Diagonal elements
+                # if i == j:
+                #     H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
+                #     C_k[i, j] = sublattice_dict[sublattice_j_label]["C_k_ij"]
+                # # Off-diagonal elements
+                # else:
                 H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
                 C_k[i, j] = sublattice_dict[sublattice_j_label]["C_k_ij"]
         if self.model_options.solve_connectivity:
@@ -111,12 +115,19 @@ class TightBindingBulk(TightBinding):
     def get_sublattice_dict(self, geometry, N_sites, data, k):
         sublattice_dict = {geometry.label_mapper[n]: {
                 "C_k_ij":0, "H_k_ij": 0} for n in range(N_sites)}
+        # Diagonal
+        idx_i = data["idx"]
+        idx_i_label = geometry.get_label(idx_i)
+        H_ii = data["spin_orbit_coupling_dict"][idx_i].copy()
+        sublattice_dict[idx_i_label]["H_k_ij"] += H_ii
+        # Off-Diagonal
         for idx_j in data["neighbour_idxs"]:
-            idx_label = geometry.get_label(idx_j)
-            r_ij, H_ij = data["dr_dict"][idx_j].copy(), data["hopping_dict"][idx_j].copy()
+            idx_j_label = geometry.get_label(idx_j)
+            r_ij = data["dr_dict"][idx_j].copy() 
+            H_ij = data["hopping_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
-            sublattice_dict[idx_label]["C_k_ij"] += bloch_phase
-            sublattice_dict[idx_label]["H_k_ij"] += bloch_phase * H_ij
+            sublattice_dict[idx_j_label]["C_k_ij"] += bloch_phase
+            sublattice_dict[idx_j_label]["H_k_ij"] += bloch_phase * H_ij
         return sublattice_dict
 
     def plot_dispersion(self, geometry: Geometry):  

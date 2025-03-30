@@ -9,6 +9,8 @@ from ...model_options import ModelOptions
 from ...cell_parser import CellParser
 from ...geometry import Geometry
 
+from IPython import embed
+
 class TightBinding:
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
@@ -19,17 +21,36 @@ class TightBinding:
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
+        # Spin
+        self.n_spins = 2
         # Orbitals
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
+        self.n_orbitals = len(self.orbitals)
         self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
-        self.n_spins = 2
-        self.n_orbitals = 4
+        # Clebsch-Gordan Coefficients
         self._clebsch_gordan()
         # Sublattice
         self.sublattice_data_dict = {}
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
         self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
+
+    def _clebsch_gordan(self):
+        self.CG_coefficients = {}
+        j_2 = 1/2
+        m_2 = np.arange(-j_2, j_2 + 1, 1)
+        for j_1 in [0, 1]:          
+            m_1 = np.arange(-j_1, j_1 + 1, 1)
+            j_3 = j_1 + j_2
+            m_3 = np.arange(-j_3, j_3 + 1, 1)
+            for i, m_j in enumerate(m_3):
+                cg = 0
+                for m_l in m_1:
+                    for m_s in m_2:
+                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
+                        if (m_l + m_s) != m_j:
+                            continue
+                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
 
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:
@@ -46,17 +67,20 @@ class TightBinding:
         dr_list, dm_list = geometry.get_dr("bulk", idx, neighbour_idxs, type="list")
         dr_dict, dm_dict = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
         directional_cosines = geometry.bond_orientation(dr_list)
-        H_ij_dict, coupled_states_dict = self.get_hopping_info(
-                    neighbour_idxs, directional_cosines)
+        t_ij_dict = self.get_hamiltonian_submatrix(
+            geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hopping")
+        s_ij_dict = self.get_hamiltonian_submatrix(
+            geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="spin_orbit_coupling")
         return {
                 "idx": idx,
                 "neighbour_idxs": neighbour_idxs,
                 "dr_dict": dr_dict,
                 "dm_dict": dm_dict,
-                "hopping_dict": H_ij_dict,
-                "coupled_states_dict": coupled_states_dict
-            }
-
+                "hopping_dict": t_ij_dict,
+                "spin_orbit_coupling_dict": s_ij_dict,
+                "interaction_dict": None
+        }
+    
     def l_to_orbitals(self, l, m_l):
         """
         Convert an angular momentum state |l, m_l> into a linear combination
@@ -114,40 +138,32 @@ class TightBinding:
         else:
             raise ValueError("State string format is incorrect.")
 
-    def get_hopping_info(self, neighbour_idxs, directional_cosines):
+    def get_hamiltonian_submatrix(self, geometry:Geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hppping"):
+        label_i = geometry.get_label(idx)
         H_i = {}
-        coupled_states_i = {}
-        for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
-            j = neighbour_idx
-            state_hoppings = self._slater_koster(cosines)
-            H_ij, coupled_states = self._get_coupled_hopping(state_hoppings)
-            H_i[j] = H_ij
-            coupled_states_i[j] = coupled_states
-        return H_i, coupled_states_i
+        if eigenvalue_type == "hopping":
+            for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
+                j = neighbour_idx
+                label_j = geometry.get_label(j)
+                eigenvalue_dict = self._slater_koster_hoppings(label_i, label_j, cosines)
+                H_ij = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
+                H_i[j] = H_ij
+        elif eigenvalue_type == "spin_orbit_coupling":
+            i = idx
+            eigenvalue_dict = self._spin_orbit_coupling(label_i) 
+            H_ii = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
+            H_i[i] = H_ii
+        else:
+            raise ValueError(f"'{eigenvalue_type}' not implemented!")  
+        return H_i    
 
-    def _clebsch_gordan(self):
-        self.CG_coefficients = {}
-        j_2 = 1/2
-        m_2 = np.arange(-j_2, j_2 + 1, 1)
-        for j_1 in [0, 1]:          
-            m_1 = np.arange(-j_1, j_1 + 1, 1)
-            j_3 = j_1 + j_2
-            m_3 = np.arange(-j_3, j_3 + 1, 1)
-            for i, m_j in enumerate(m_3):
-                cg = 0
-                for m_l in m_1:
-                    for m_s in m_2:
-                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
-                        if (m_l + m_s) != m_j:
-                            continue
-                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
-
-    def _slater_koster(self, cosines):
-        nn_parser = self.cell_parser.eigenvalues.nn_hopping.value
-        t_ss = nn_parser["t_ss_sigma"]
-        t_sp = nn_parser["t_sp_sigma"]
-        t_pp_sigma = nn_parser["t_pp_sigma"]
-        t_pp_pi = nn_parser["t_pp_pi"]
+    def _slater_koster_hoppings(self, label_i, label_j, cosines):
+        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+        nn_parser = eigenvalue_parser.value["nn_hopping"]
+        t_ss = nn_parser[label_j]["t_ss_sigma"]
+        t_sp = nn_parser[label_j]["t_sp_sigma"]
+        t_pp_sigma = nn_parser[label_j]["t_pp_sigma"]
+        t_pp_pi = nn_parser[label_j]["t_pp_pi"]
         n_z = 0 # TODO: implement bukcling angle in json inbetween sublattices
         l, m = (cosines[0], cosines[1]) if len(cosines) == 2 else (cosines[0], cosines[1])
         n = cosines[2] if len(cosines) == 3 else n_z
@@ -161,13 +177,13 @@ class TightBinding:
             ]
             for i in range(len(p_cosines))
         ]
-        state_hoppings = {}
+        eigenvalue_dict = {}
         for alpha in self.orbitals:
             for beta in self.orbitals:
                 key = f"|{alpha}><{beta}|"
                 # s-s
                 if alpha == beta == 's':
-                    state_hoppings[key] = t_ss
+                    eigenvalue_dict[key] = t_ss
                 # s-p or p-s
                 elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
                     p_orb = alpha if alpha.startswith('p') else beta
@@ -177,17 +193,39 @@ class TightBinding:
                     t = p_cosines[d] * t_sp
                     if key[1] != "s":
                         t *= -1
-                    state_hoppings[key] = t
+                    eigenvalue_dict[key] = t
                 # p-p
                 elif alpha.startswith('p') and beta.startswith('p'):
                     d1 = self.direction_index[alpha.split('_')[1]]
                     d2 = self.direction_index[beta.split('_')[1]]
-                    state_hoppings[key] = pp_matrix[d1][d2]
+                    eigenvalue_dict[key] = pp_matrix[d1][d2]
                 else:
-                    state_hoppings[key] = 0
-        return state_hoppings
+                    eigenvalue_dict[key] = 0
+        return eigenvalue_dict
+    
+    def _spin_orbit_coupling(self, label_i):
+        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+        so_parser = eigenvalue_parser.value["SO_coupling"][label_i]
+        coupling_dict = {}
+        for alpha in self.orbitals:
+            for beta in self.orbitals:
+                key = f"|{alpha}><{beta}|"
+                # s-s
+                if alpha == beta == 's':
+                    coupling_dict[key] = 0
+                # s-p or p-s
+                elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
+                    p_orb = alpha if alpha.startswith('p') else beta
+                    d = self.direction_index[p_orb.split('_')[1]]
+                    coupling_dict[key] = 0
+                # p-p
+                elif alpha.startswith('p') and beta.startswith('p'):
+                    coupling_dict[key] = so_parser["lambda_pp"]
+                else:
+                    coupling_dict[key] = 0
+        return coupling_dict
 
-    def _get_coupled_hopping(self, state_hoppings:dict):
+    def _coupled_unitary_transform(self, eigenvalue_type:str, eigenvalue_dict:dict):
         """
         Transforms the 8x8 spin-orbit Hamiltonian (s + p orbitals with spin-1/2)
         into the coupled |j, m_j> basis. Returns the transformed 8x8 matrix.
@@ -204,9 +242,8 @@ class TightBinding:
         """
         dim = len(self.CG_coefficients.keys())
         H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
-        # NOTE: Transitions to opposite spin-states are not allowed
-        # NOTE: Assumed t_{ss}^{↑} == t_{ss}^{↓}
-        coupled_states = {}
+        # Assumed t_{ss}^{↑} == t_{ss}^{↓}
+        coupled_states = {} # NOTE: debugging
         for n, (bra_key, cg_bra) in enumerate(self.CG_coefficients.items()):
             bra_l   = self.get_quantum_number(bra_key, pos=0)
             bra_m_l = self.get_quantum_number(bra_key, pos=1)
@@ -218,33 +255,23 @@ class TightBinding:
                 ket_l   = self.get_quantum_number(ket_key, pos=0)
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
-                if bra_m_s != ket_m_s:
+                if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
+                     # Transitions to opposite spin-states are not allowed
                     continue
                 j_m = ket_l + 1/2
                 m_j_m = ket_m_l + ket_m_s
                 ket_orbitals = self.l_to_orbitals(ket_l, ket_m_l)
-                t_nm = 0
+                H_nm = 0
                 for bra_orb, bra_coeff in bra_orbitals.items():
                     for ket_orb, ket_coeff in ket_orbitals.items():
+                        if (bra_orb not in self.orbitals) or (ket_orb not in self.orbitals):
+                            continue
                         hopping_key = f"|{bra_orb}><{ket_orb}|"
-                        t_hop = state_hoppings[hopping_key]
-                        t_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * t_hop
-                        # if j_n == 3/2:
-                        #     t_nm+= delta_heavy
-                        # elif j_n = 1/2:
-                        #     t_nm += delta_light
-                # TODO: add spin-orbit coupling hopping "delta"
-                coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = t_nm
-                H_ij[n, m] = t_nm
-        # FIXME: sort the matrix into a more predictable state, as currently,
-        # i, j = 0, 0 would be interpreted as the |j=1/2, m=-1/2><j=1/2, m=-1/2| entry
-        # i, j = 0, 1 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-3/2| entry
-        # i, j = 1, 0 would be interpreted as the |j=1/2, m=-1/2><j=3/2, m=-1/2| entry
-        # i, j = 1, 1 would be interpreted as the |j=1/2, m=+1/2><j=1/2, m=+1/2| entry
-        # i, j = 0, 2 would be interpreted as the |j=1/2, m=+1/2><j=3/2, m=-3/2| entry
-        # i.e. unpredictable
-        # NOTE: maybe include make a unitary transformation matrix
-        return H_ij, coupled_states
+                        E = eigenvalue_dict[hopping_key]
+                        H_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * E
+                coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = H_nm
+                H_ij[n, m] = H_nm
+        return H_ij
 
     @abstractmethod
     def solve_eigenvalues(self, geometry:Geometry, acceptor:bool, H_type:str):
