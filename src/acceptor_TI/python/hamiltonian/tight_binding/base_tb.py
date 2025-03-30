@@ -145,7 +145,7 @@ class TightBinding:
             j = neighbour_idx
             label_j = geometry.get_label(j)
             eigenvalue_dict = self.get_eigenvalue_dict(eigenvalue_type, label_i, label_j, cosines)
-            H_ij = self._coupled_unitary_transform(eigenvalue_dict)
+            H_ij = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
             H_i[j] = H_ij
             coupled_states_i[j] = eigenvalue_dict
         return H_i
@@ -226,7 +226,7 @@ class TightBinding:
                     coupling_dict[key] = 0
         return coupling_dict
 
-    def _coupled_unitary_transform(self, eigenvalue_dict:dict):
+    def _coupled_unitary_transform(self, eigenvalue_type:str, eigenvalue_dict:dict):
         """
         Transforms the 8x8 spin-orbit Hamiltonian (s + p orbitals with spin-1/2)
         into the coupled |j, m_j> basis. Returns the transformed 8x8 matrix.
@@ -256,7 +256,7 @@ class TightBinding:
                 ket_l   = self.get_quantum_number(ket_key, pos=0)
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
-                if bra_m_s != ket_m_s:
+                if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
                      # Transitions to opposite spin-states are not allowed
                     continue
                 j_m = ket_l + 1/2
