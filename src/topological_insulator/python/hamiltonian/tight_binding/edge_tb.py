@@ -142,7 +142,6 @@ class TightBindingEdge(TightBinding):
                     C_k_ij += bloch_phase
                 H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
                 C_k[i, j] = C_k_ij
-                C_k[j, i] = C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
         else:
