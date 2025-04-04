@@ -22,12 +22,24 @@ class TightBinding:
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
+        self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         # Spin
         self.n_spins = 2
+        self.spin_dict = {1/2: "+", -1/2: "-"}
+        self.pauli_matrix_dict = {
+            0: np.array(
+                [[0, 1],
+                [1, 0]]),
+            1: np.array(
+                [[0, -1j],
+                 [1j, 0]]),
+            2: np.array(
+                [[1, 0],
+                [0, -1]])
+        }
         # Orbitals
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
         self.n_orbitals = len(self.orbitals)
-        self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
         # Clebsch-Gordan Coefficients
         self._clebsch_gordan()
@@ -121,13 +133,15 @@ class TightBinding:
             ]
             for i in range(len(p_cosines))
         ]
+        # Hopping Eigenvalues
         eigenvalue_dict = {}
         for alpha in self.orbitals:
             for beta in self.orbitals:
                 key = f"|{alpha}><{beta}|"
+                H_t = 0
                 # s-s
                 if alpha == beta == 's':
-                    eigenvalue_dict[key] = t_ss
+                    H_t += t_ss
                 # s-p or p-s
                 elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
                     p_orb = alpha if alpha.startswith('p') else beta
@@ -137,14 +151,17 @@ class TightBinding:
                     t = p_cosines[d] * t_sp
                     if key[1] != "s":
                         t *= -1
-                    eigenvalue_dict[key] = t
+                    H_t += t
                 # p-p
                 elif alpha.startswith('p') and beta.startswith('p'):
                     i = self.direction_index[alpha.split('_')[1]]
                     j = self.direction_index[beta.split('_')[1]]
-                    eigenvalue_dict[key] = pp_matrix[i][j]
-                else:
-                    eigenvalue_dict[key] = 0
+                    H_t += pp_matrix[i][j]
+                # Spin
+                for sigma_1 in self.spin_dict.values():
+                    for sigma_2 in self.spin_dict.values():
+                        key = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        eigenvalue_dict[key] = H_t
         return eigenvalue_dict
 
     def _spin_orbit_coupling(self, label_i):
@@ -152,30 +169,21 @@ class TightBinding:
         so_parser = eigenvalue_parser.value["SO_coupling"][label_i]
         lambda_SO = so_parser["lambda_pp"]
         coupling_dict = {}
-        for alpha in self.orbitals:
-            for beta in self.orbitals:
-                key = f"|{alpha}><{beta}|"
-                # s-s
-                if alpha == beta == 's':
-                    coupling_dict[key] = 0
-                # s-p or p-s
-                elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
-                    coupling_dict[key] = 0
-                # p-p
-                elif alpha.startswith('p') and beta.startswith('p'):
-                    coupling_dict[key] = 0
-                    # i = self.direction_index[alpha.split('_')[1]]
-                    # j = self.direction_index[beta.split('_')[1]]
-                    # if i == j:
-                    #     coupling_dict[key] = 0
-                    #     continue
-                    # k = 
-                    # eps_ijk = LeviCivita(i, j, k)
-                    # H_SO = 1j * lambda_SO
-                    # coupling_dict[key] = H_SO
-                    # embed()
-                else:
-                    coupling_dict[key] = 0
+        for n, sigma_1 in enumerate(self.spin_dict.values()):
+            for m, sigma_2 in enumerate(self.spin_dict.values()):
+                for alpha in self.orbitals:
+                    for beta in self.orbitals:
+                        key = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        H_SO = 0
+                        # p-p
+                        if alpha.startswith('p') and beta.startswith('p'):
+                            i = self.direction_index[alpha.split('_')[1]]
+                            j = self.direction_index[beta.split('_')[1]]
+                            k = (set(self.direction_index.values()) - {i, j}).pop()
+                            eps_ijk = LeviCivita(i, j, k)
+                            sigma_k = self.pauli_matrix_dict[k]
+                            H_SO += 1j * lambda_SO * eps_ijk * sigma_k[n, m]
+                        coupling_dict[key] = H_SO  
         return coupling_dict
 
     def _coupled_unitary_transform(self, eigenvalue_type:str, eigenvalue_dict:dict):
@@ -195,12 +203,12 @@ class TightBinding:
         """
         dim = len(self.CG_coefficients.keys())
         H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
-        # Assumed t_{ss}^{↑} == t_{ss}^{↓}
-        coupled_states = {} # NOTE: debugging
+        coupled_states = {}
         for n, (bra_key, CG_bra) in enumerate(self.CG_coefficients.items()):
             bra_l   = self.get_quantum_number(bra_key, pos=0)
             bra_m_l = self.get_quantum_number(bra_key, pos=1)
             bra_m_s = self.get_quantum_number(bra_key, pos=3)
+            bra_sigma = self.spin_dict[bra_m_s]
             bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
             j_n = bra_l + 1/2
             m_j_n = bra_m_l + bra_m_s
@@ -208,6 +216,7 @@ class TightBinding:
                 ket_l   = self.get_quantum_number(ket_key, pos=0)
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
+                ket_sigma = self.spin_dict[ket_m_s]
                 if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
                      # Transitions to opposite spin-states are not allowed
                     continue
@@ -219,7 +228,7 @@ class TightBinding:
                     for ket_orb, ket_coeff in ket_orbitals.items():
                         if (bra_orb not in self.orbitals) or (ket_orb not in self.orbitals):
                             continue
-                        hopping_key = f"|{bra_orb}><{ket_orb}|"
+                        hopping_key = f"|{bra_orb},{bra_sigma}><{ket_orb},{ket_sigma}|"
                         E = eigenvalue_dict[hopping_key]
                         H_nm += CG_bra * CG_ket * bra_coeff * ket_coeff * E
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = H_nm
