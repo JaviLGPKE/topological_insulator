@@ -1,12 +1,6 @@
 ### VS Code ###
 .vscode
 
-## proteo ##
-results_*
-
-## PETSC ##
-*.log
-
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -20,7 +14,6 @@ pip-delete-this-directory.txt
 
 # Distribution / packaging
 .Python
-solver_proteo.egg-info/
 results/
 __pycache__/
 build/
@@ -64,10 +57,6 @@ cover/
 docs/_build/
 docs/build/
 docs/latex/
-
-# PETSC logs
-*.log
-matrix_output.txt
 
 # Docker
 # docker/

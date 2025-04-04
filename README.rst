@@ -1,6 +1,7 @@
 Topological Insulators
+------------
 
-Tight-Binding approximation which includes nearest neighbour hopping and spin orbit coupling Hamiltonian terms.
+Tight-Binding approximation which includes **nearest neighbour hopping** and **spin orbit coupling** Hamiltonian terms.
 
 Installation
 ------------
