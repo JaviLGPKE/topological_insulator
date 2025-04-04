@@ -1,9 +1,5 @@
 import numpy as np
-
 from matplotlib import pyplot as plt
-from scipy.spatial import ConvexHull
-from itertools import combinations
-from collections import defaultdict
 
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser

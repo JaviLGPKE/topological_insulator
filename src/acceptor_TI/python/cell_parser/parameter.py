@@ -1,6 +1,3 @@
-from abc import abstractmethod
-import numpy as np
-
 class Parameter:
     def __init__(self, name:str, values:dict):
         self.name = name
@@ -14,8 +11,7 @@ class Parameter:
                 ]
             elif isinstance(value["value"], list) and isinstance(value["value"][0], str):
                 value["value"] = [eval(i) if isinstance(i, str) else i for i in value["value"]]
-            setattr(self, parameter, ParameterAttributes(value))
-    
+            setattr(self, parameter, ParameterAttributes(value))   
 
 class ParameterAttributes:
     def __init__(self, values: dict):

@@ -1,6 +1,3 @@
-import numpy as np
-from matplotlib import pyplot as plt
-
 from .model_options import ModelOptions
 from .cell_parser import CellParser
 from .geometry import Geometry

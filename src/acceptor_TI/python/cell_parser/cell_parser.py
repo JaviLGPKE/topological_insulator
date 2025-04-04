@@ -1,17 +1,10 @@
-import numpy as np
 import json
 import os
-from types import SimpleNamespace
-from typing import Union
-
-# import kwant
 
 from .parameter import Parameter
 
 class CellParser:
-    # TODO: This class will be dynamic in creating structures
     def __init__(self, data_path, file_name):
-        # Material
         self.load_data(data_path, file_name)
 
     def load_data(self, data_path, file_name):
