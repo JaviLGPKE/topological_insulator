@@ -1,6 +1,6 @@
-from acceptor_TI import Problem
+from topological_insulator import Problem
 
-data_path = "../../../acceptor_TI/data/"
+data_path = "../../../topological_insulator/data/"
 file_name = "honeycomb.json"
 
 problem = Problem(data_path=data_path, file_name=file_name)
@@ -21,6 +21,5 @@ problem.setup(
 )
 
 problem.run(
-    acceptor=False,
     H_type="real_space"
 )

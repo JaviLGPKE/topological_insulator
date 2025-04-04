@@ -13,8 +13,8 @@ To use the library, first install it using pip:
 
 .. code-block:: console
 
-   $ git clone https://github.com/JaviLGPKE/topological_insulators.git
-   $ cd topological_insulators
+   $ git clone https://github.com/JaviLGPKE/topological_insulator.git
+   $ cd topological_insulator
    $ pip install -e .
 
 If your *PYTHONPATH* doesn't contains pybind11, you should add it:
