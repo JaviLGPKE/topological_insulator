@@ -120,12 +120,20 @@ class TightBindingEdge(TightBinding):
             for idx_j, idx_j_phase in phase_dict.items():
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                m_ij = site_dict_i["dm_dict"][idx_j]
-                H_ij = site_dict_i["hopping_dict"][idx_j].copy()
+                # Bond
+                if idx_j in site_dict_i["neighbour_idxs"]:
+                    m_ij = site_dict_i["dm_dict"][idx_j]
+                    t_ij = site_dict_i["hopping_dict"][idx_j].copy()
+                else:
+                    dr_list, dm_list = geometry.get_dr(self.location, idx_i, [idx_j], type="list")
+                    directional_cosines = geometry.bond_orientation(dr_list)
+                    t_ij = self.get_hamiltonian_submatrix(
+                        geometry, idx_i, [idx_j], directional_cosines, eigenvalue_type="hopping")[idx_j]
+                    m_ij = dm_list[0]
                 bloch_phase =  np.exp(1j * k * m_ij)
-                H_k_ij = bloch_phase * H_ij
+                H_k_ij = bloch_phase * t_ij
                 C_k_ij = bloch_phase
-                # Bond Phase
+                # Phase
                 if idx_j_phase is not None:
                     m_ij_phase = site_dict_i["dm_dict"][idx_j_phase]
                     H_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
@@ -134,6 +142,7 @@ class TightBindingEdge(TightBinding):
                     C_k_ij += bloch_phase
                 H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
                 C_k[i, j] = C_k_ij
+                C_k[j, i] = C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
         else:

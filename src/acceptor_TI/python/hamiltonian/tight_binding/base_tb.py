@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import linalg
 from sympy.physics.quantum.cg import CG
+from sympy import LeviCivita
 import re
 from matplotlib import pyplot as plt
 from abc import abstractmethod
@@ -64,7 +65,7 @@ class TightBinding:
 
     def sublattice_data(self, geometry:Geometry, location:str, idx:int):
         neighbour_idxs = geometry.get_neighbour_idxs(idx)
-        dr_list, dm_list = geometry.get_dr("bulk", idx, neighbour_idxs, type="list")
+        dr_list, dm_list = geometry.get_dr(location, idx, neighbour_idxs, type="list")
         dr_dict, dm_dict = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
         directional_cosines = geometry.bond_orientation(dr_list)
         t_ij_dict = self.get_hamiltonian_submatrix(
@@ -80,63 +81,6 @@ class TightBinding:
                 "spin_orbit_coupling_dict": s_ij_dict,
                 "interaction_dict": None
         }
-    
-    def l_to_orbitals(self, l, m_l):
-        """
-        Convert an angular momentum state |l, m_l> into a linear combination
-        of orbital states. Returns a dictionary where the keys are the orbital
-        labels ('s', 'p_x', 'p_y', 'p_z') and the values are the expansion coefficients.
-        
-        Using the conventions:
-        |0,0>         = |s>
-        |1,0>         = |p_z>
-        |1,+1>        = -1/sqrt(2) ( |p_x> + |p_y> )
-        |1,-1>        = +1/sqrt(2) ( |p_x> - |p_y> )
-        """
-        # s
-        if l == 0 and m_l == 0:
-            return {"s": 1.0}
-        # p
-        elif l == 1:
-            if m_l == 0:
-                return {"p_z": 1.0}
-            elif m_l == 1:
-                return {"p_x": -1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            elif m_l == -1:
-                return {"p_x":  1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            else:
-                raise ValueError("Invalid m_l value for l=1")
-        else:
-            raise ValueError("Conversion for l > 1 is not implemented!")      
-
-    def get_quantum_number(self, key, pos=0):
-        """
-        Extract a quantum number from a state string in ket notation: |a,b;c,d>
-        The 'pos' parameter determines which quantum number to extract:
-            pos = 0: returns the first quantum number (a)
-            pos = 1: returns the second quantum number (b)
-            pos = 2: returns the third quantum number (c)
-            pos = 3: returns the fourth quantum number (d)
-        
-        Parameters:
-            key (str): The state string.
-            pos (int): The 0-indexed position of the quantum number to extract.
-            
-        Returns:
-            float: The quantum number at the specified position.
-            
-        Raises:
-            ValueError: If the state string format is incorrect or if 'pos' is out of range.
-        """
-        match = self.state_pattern.search(key)
-        if match:
-            try:
-                # Adjust for 1-indexed regex groups
-                return float(match.group(pos + 1))
-            except IndexError:
-                raise ValueError(f"State string does not contain a quantum number at position {pos}")
-        else:
-            raise ValueError("State string format is incorrect.")
 
     def get_hamiltonian_submatrix(self, geometry:Geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hppping"):
         label_i = geometry.get_label(idx)
@@ -196,16 +140,17 @@ class TightBinding:
                     eigenvalue_dict[key] = t
                 # p-p
                 elif alpha.startswith('p') and beta.startswith('p'):
-                    d1 = self.direction_index[alpha.split('_')[1]]
-                    d2 = self.direction_index[beta.split('_')[1]]
-                    eigenvalue_dict[key] = pp_matrix[d1][d2]
+                    i = self.direction_index[alpha.split('_')[1]]
+                    j = self.direction_index[beta.split('_')[1]]
+                    eigenvalue_dict[key] = pp_matrix[i][j]
                 else:
                     eigenvalue_dict[key] = 0
         return eigenvalue_dict
-    
+
     def _spin_orbit_coupling(self, label_i):
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         so_parser = eigenvalue_parser.value["SO_coupling"][label_i]
+        lambda_SO = so_parser["lambda_pp"]
         coupling_dict = {}
         for alpha in self.orbitals:
             for beta in self.orbitals:
@@ -215,12 +160,20 @@ class TightBinding:
                     coupling_dict[key] = 0
                 # s-p or p-s
                 elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
-                    p_orb = alpha if alpha.startswith('p') else beta
-                    d = self.direction_index[p_orb.split('_')[1]]
                     coupling_dict[key] = 0
                 # p-p
                 elif alpha.startswith('p') and beta.startswith('p'):
-                    coupling_dict[key] = so_parser["lambda_pp"]
+                    coupling_dict[key] = 0
+                    # i = self.direction_index[alpha.split('_')[1]]
+                    # j = self.direction_index[beta.split('_')[1]]
+                    # if i == j:
+                    #     coupling_dict[key] = 0
+                    #     continue
+                    # k = 
+                    # eps_ijk = LeviCivita(i, j, k)
+                    # H_SO = 1j * lambda_SO
+                    # coupling_dict[key] = H_SO
+                    # embed()
                 else:
                     coupling_dict[key] = 0
         return coupling_dict
@@ -244,14 +197,14 @@ class TightBinding:
         H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
         # Assumed t_{ss}^{↑} == t_{ss}^{↓}
         coupled_states = {} # NOTE: debugging
-        for n, (bra_key, cg_bra) in enumerate(self.CG_coefficients.items()):
+        for n, (bra_key, CG_bra) in enumerate(self.CG_coefficients.items()):
             bra_l   = self.get_quantum_number(bra_key, pos=0)
             bra_m_l = self.get_quantum_number(bra_key, pos=1)
             bra_m_s = self.get_quantum_number(bra_key, pos=3)
             bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
             j_n = bra_l + 1/2
             m_j_n = bra_m_l + bra_m_s
-            for m, (ket_key, cg_ket) in enumerate(self.CG_coefficients.items()):
+            for m, (ket_key, CG_ket) in enumerate(self.CG_coefficients.items()):
                 ket_l   = self.get_quantum_number(ket_key, pos=0)
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
@@ -268,10 +221,67 @@ class TightBinding:
                             continue
                         hopping_key = f"|{bra_orb}><{ket_orb}|"
                         E = eigenvalue_dict[hopping_key]
-                        H_nm += cg_bra * cg_ket * bra_coeff * ket_coeff * E
+                        H_nm += CG_bra * CG_ket * bra_coeff * ket_coeff * E
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = H_nm
                 H_ij[n, m] = H_nm
         return H_ij
+
+    def l_to_orbitals(self, l, m_l):
+        """
+        Convert an angular momentum state |l, m_l> into a linear combination
+        of orbital states. Returns a dictionary where the keys are the orbital
+        labels ('s', 'p_x', 'p_y', 'p_z') and the values are the expansion coefficients.
+        
+        Using the conventions:
+        |0,0>         = |s>
+        |1,0>         = |p_z>
+        |1,+1>        = -1/sqrt(2) ( |p_x> + |p_y> )
+        |1,-1>        = +1/sqrt(2) ( |p_x> - |p_y> )
+        """
+        # s
+        if l == 0 and m_l == 0:
+            return {"s": 1.0}
+        # p
+        elif l == 1:
+            if m_l == 0:
+                return {"p_z": 1.0}
+            elif m_l == 1:
+                return {"p_x": -1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
+            elif m_l == -1:
+                return {"p_x":  1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
+            else:
+                raise ValueError("Invalid m_l value for l=1")
+        else:
+            raise ValueError("Conversion for l > 1 is not implemented!")      
+
+    def get_quantum_number(self, key, pos=0):
+        """
+        Extract a quantum number from a state string in ket notation: |a,b;c,d>
+        The 'pos' parameter determines which quantum number to extract:
+            pos = 0: returns the first quantum number (a)
+            pos = 1: returns the second quantum number (b)
+            pos = 2: returns the third quantum number (c)
+            pos = 3: returns the fourth quantum number (d)
+        
+        Parameters:
+            key (str): The state string.
+            pos (int): The 0-indexed position of the quantum number to extract.
+            
+        Returns:
+            float: The quantum number at the specified position.
+            
+        Raises:
+            ValueError: If the state string format is incorrect or if 'pos' is out of range.
+        """
+        match = self.state_pattern.search(key)
+        if match:
+            try:
+                # Adjust for 1-indexed regex groups
+                return float(match.group(pos + 1))
+            except IndexError:
+                raise ValueError(f"State string does not contain a quantum number at position {pos}")
+        else:
+            raise ValueError("State string format is incorrect.")
 
     @abstractmethod
     def solve_eigenvalues(self, geometry:Geometry, H_type:str):

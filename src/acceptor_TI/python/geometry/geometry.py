@@ -234,38 +234,46 @@ class Geometry:
                     raise ValueError(f"Site {path} not found in self.sites")
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
-    
+
     def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
-        # FIXME: Not general enough for every case
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         phase_dict = {}
         if self.n_sublattices >= 3:
-            for m, idx_j in enumerate(unit_cell_idxs):
-                bond_label = self.get_label(idx_j)
-                corresponding_idx = next((idx for idx in non_unit_cell_idxs if self.get_label(idx) == bond_label), None)
-                if corresponding_idx is not None:
-                    phase_dict[idx_j] = corresponding_idx
-                else:
+            for idx_j, m_ij in dm_dict.items():
+                if idx_j in non_unit_cell_idxs:
+                    idx_j_phase = idx_j
+                    idx_j = self._find_phase(idx_j_phase, m_ij)
+                    phase_dict[idx_j] = idx_j_phase
+                elif idx_j in unit_cell_idxs:
+                    if idx_j in phase_dict.keys():
+                        # skip idx that has established phase
+                        continue
                     phase_dict[idx_j] = None
+                else:
+                    raise ValueError(f"'{idx_j}' not in dm_dict")
         elif self.n_sublattices == 2:
-            T = self.T
             for idx_j in unit_cell_idxs:
                 m_ij = dm_dict[idx_j]
-                phase_site = self.sites[idx_j].copy()
-                if m_ij > 0: # left direction
-                    phase_site += T
-                else: # right direction
-                    phase_site -= T
-                phase_idx_j = np.where(
-                    np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-                if phase_idx_j not in dm_dict.keys():
+                idx_j_phase = self._find_phase(idx_j, m_ij)
+                if idx_j_phase not in dm_dict.keys():
                     phase_dict[idx_j] = None
                 else:
-                    phase_dict[idx_j] = phase_idx_j
+                    phase_dict[idx_j] = idx_j_phase
         else:
             raise NotImplementedError("Not Implemented!")
         return phase_dict
+    
+    def _find_phase(self, idx_j, m_ij):
+        T = self.T
+        phase_site = self.sites[idx_j].copy()
+        if m_ij > 0: # left direction
+            phase_site += T
+        else: # right direction
+            phase_site -= T
+        idx_j_phase = np.where(
+            np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
+        return idx_j_phase
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
         """
