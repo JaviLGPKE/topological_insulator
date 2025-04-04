@@ -1,4 +1,4 @@
-Topological Insulators
+Topological Insulator
 ------------
 
 Tight-Binding approximation which includes **nearest neighbour hopping** and **spin orbit coupling** Hamiltonian terms.
