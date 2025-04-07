@@ -115,7 +115,8 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
-            H_k_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            s_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
+            H_k_ii = s_ii
             H_k[row_slice, row_slice] = H_k_ii # Diagonal
             for idx_j, idx_j_phase in phase_dict.items():
                 j = idx_map[idx_j]
@@ -136,12 +137,12 @@ class TightBindingEdge(TightBinding):
                 # Phase
                 if idx_j_phase is not None:
                     m_ij_phase = site_dict_i["dm_dict"][idx_j_phase]
-                    H_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
+                    t_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
                     bloch_phase =  np.exp(1j * k * m_ij_phase) 
-                    H_k_ij += bloch_phase * H_ij_phase
+                    H_k_ij += bloch_phase * t_ij_phase
                     C_k_ij += bloch_phase
                 H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
-                C_k[i, j] = C_k_ij
+                C_k[i, j] = -1 * C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
         else:
