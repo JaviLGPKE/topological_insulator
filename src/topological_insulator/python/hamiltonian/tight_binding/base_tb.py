@@ -1,69 +1,32 @@
 import numpy as np
 from scipy import linalg
-from sympy.physics.quantum.cg import CG
 from sympy import LeviCivita
 import re
 from matplotlib import pyplot as plt
 from abc import abstractmethod
 
+from ..notation import Notation
 from ...model_options import ModelOptions
 from ...cell_parser import CellParser
 from ...geometry import Geometry
 
 from IPython import embed
 
-class TightBinding:
+class TightBinding(Notation):
     """
     Tight-Binding approximation Hamiltonian that can include, nearest neighbour hopping, 
     spin-orbit coupling interaction and Coulomb repulsive interaction terms.
     """
 
     def __init__(self, model_options:ModelOptions, cell_parser: CellParser):
+        super().__init__()
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
-        self.direction_index = {'x': 0, 'y': 1, 'z': 2}
-        # Spin
-        self.n_spins = 2
-        self.spin_dict = {1/2: "+", -1/2: "-"}
-        self.pauli_matrix_dict = {
-            0: np.array(
-                [[0, 1],
-                [1, 0]]),
-            1: np.array(
-                [[0, -1j],
-                 [1j, 0]]),
-            2: np.array(
-                [[1, 0],
-                [0, -1]])
-        }
-        # Orbitals
-        self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
-        self.n_orbitals = len(self.orbitals)
-        self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
-        # Clebsch-Gordan Coefficients
-        self._clebsch_gordan()
         # Sublattice
         self.sublattice_data_dict = {}
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
         self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
-
-    def _clebsch_gordan(self):
-        self.CG_coefficients = {}
-        j_2 = 1/2
-        m_2 = np.arange(-j_2, j_2 + 1, 1)
-        for j_1 in [0, 1]:          
-            m_1 = np.arange(-j_1, j_1 + 1, 1)
-            j_3 = j_1 + j_2
-            m_3 = np.arange(-j_3, j_3 + 1, 1)
-            for i, m_j in enumerate(m_3):
-                cg = 0
-                for m_l in m_1:
-                    for m_s in m_2:
-                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
-                        if (m_l + m_s) != m_j:
-                            continue
-                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
 
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:
@@ -201,13 +164,12 @@ class TightBinding:
         H_ij : np.ndarray
             The Hamiltonian expressed in the total-angular-momentum coupled basis |j, m_j>.
         """
-        dim = len(self.CG_coefficients.keys())
-        H_ij = np.zeros(shape=(dim,dim) , dtype=complex)
+        # Unitary Transform
         coupled_states = {}
-        for n, (bra_key, CG_bra) in enumerate(self.CG_coefficients.items()):
-            bra_l   = self.get_quantum_number(bra_key, pos=0)
-            bra_m_l = self.get_quantum_number(bra_key, pos=1)
-            bra_m_s = self.get_quantum_number(bra_key, pos=3)
+        for n, (bra_state, CG_bra) in enumerate(self.CG_coefficients.items()):
+            bra_l   = self.get_quantum_number(bra_state, pos=0)
+            bra_m_l = self.get_quantum_number(bra_state, pos=1)
+            bra_m_s = self.get_quantum_number(bra_state, pos=3)
             bra_sigma = self.spin_dict[bra_m_s]
             bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
             j_n = bra_l + 1/2
@@ -217,80 +179,24 @@ class TightBinding:
                 ket_m_l = self.get_quantum_number(ket_key, pos=1)
                 ket_m_s = self.get_quantum_number(ket_key, pos=3)
                 ket_sigma = self.spin_dict[ket_m_s]
-                if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
-                     # Transitions to opposite spin-states are not allowed
-                    continue
                 j_m = ket_l + 1/2
                 m_j_m = ket_m_l + ket_m_s
                 ket_orbitals = self.l_to_orbitals(ket_l, ket_m_l)
                 H_nm = 0
                 for bra_orb, bra_coeff in bra_orbitals.items():
                     for ket_orb, ket_coeff in ket_orbitals.items():
-                        if (bra_orb not in self.orbitals) or (ket_orb not in self.orbitals):
+                        if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
+                            # Transitions to opposite spin-states are not allowed
                             continue
-                        hopping_key = f"|{bra_orb},{bra_sigma}><{ket_orb},{ket_sigma}|"
-                        E = eigenvalue_dict[hopping_key]
+                        outer_product = f"|{bra_orb},{bra_sigma}><{ket_orb},{ket_sigma}|"
+                        E = eigenvalue_dict[outer_product]
                         H_nm += CG_bra * CG_ket * bra_coeff * ket_coeff * E
                 coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = H_nm
-                H_ij[n, m] = H_nm
+        # Eigenvalue Entries
+        N = int(len(coupled_states.keys())**0.5)
+        entries = list(coupled_states.values())
+        H_ij =  np.array(entries).reshape(N, N)
         return H_ij
-
-    def l_to_orbitals(self, l, m_l):
-        """
-        Convert an angular momentum state |l, m_l> into a linear combination
-        of orbital states. Returns a dictionary where the keys are the orbital
-        labels ('s', 'p_x', 'p_y', 'p_z') and the values are the expansion coefficients.
-        
-        Using the conventions:
-        |0,0>         = |s>
-        |1,0>         = |p_z>
-        |1,+1>        = -1/sqrt(2) ( |p_x> + |p_y> )
-        |1,-1>        = +1/sqrt(2) ( |p_x> - |p_y> )
-        """
-        # s
-        if l == 0 and m_l == 0:
-            return {"s": 1.0}
-        # p
-        elif l == 1:
-            if m_l == 0:
-                return {"p_z": 1.0}
-            elif m_l == 1:
-                return {"p_x": -1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            elif m_l == -1:
-                return {"p_x":  1/np.sqrt(2), "p_y": 1j* -1/np.sqrt(2)}
-            else:
-                raise ValueError("Invalid m_l value for l=1")
-        else:
-            raise ValueError("Conversion for l > 1 is not implemented!")      
-
-    def get_quantum_number(self, key, pos=0):
-        """
-        Extract a quantum number from a state string in ket notation: |a,b;c,d>
-        The 'pos' parameter determines which quantum number to extract:
-            pos = 0: returns the first quantum number (a)
-            pos = 1: returns the second quantum number (b)
-            pos = 2: returns the third quantum number (c)
-            pos = 3: returns the fourth quantum number (d)
-        
-        Parameters:
-            key (str): The state string.
-            pos (int): The 0-indexed position of the quantum number to extract.
-            
-        Returns:
-            float: The quantum number at the specified position.
-            
-        Raises:
-            ValueError: If the state string format is incorrect or if 'pos' is out of range.
-        """
-        match = self.state_pattern.search(key)
-        if match:
-            try:
-                # Adjust for 1-indexed regex groups
-                return float(match.group(pos + 1))
-            except IndexError:
-                raise ValueError(f"State string does not contain a quantum number at position {pos}")
-        else:
-            raise ValueError("State string format is incorrect.")
 
     @abstractmethod
     def solve_eigenvalues(self, geometry:Geometry, H_type:str):
@@ -307,22 +213,6 @@ class TightBinding:
     def _solve_eigenvalues(self, H):
         E, U = linalg.eigh(H, check_finite=False, driver="evr")
         return E, U
-
-    def _visualise_matrix(self, M):
-        plt.figure(figsize=(12, 5))
-        cmap = plt.get_cmap('coolwarm')
-        cmap.set_bad('white')
-        mask = np.isclose(M, 0, atol=1e-12)
-        # M_masked = np.ma.masked_where(mask, M)
-        plt.subplot(1, 2, 1)
-        plt.imshow(M.real, cmap=cmap)
-        plt.title('Real Part')
-        plt.colorbar()
-        plt.subplot(1, 2, 2)
-        plt.imshow(M.imag, cmap=cmap)
-        plt.title('Imaginary Part')
-        plt.colorbar()
-        plt.show()
 
     @abstractmethod
     def plot_dispersion(self, geometry: Geometry):

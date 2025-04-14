@@ -27,7 +27,7 @@ class Problem:
         self.geometry.build_lattice()
         # Hamiltonian
         for key in self.hamiltonian.keys():
-            # Tight-Binding Model
+            # Tight-Binding Approximation
             if location not in [key, "both"]:
                 continue
             TB = TightBindingBulk if key == "bulk" else TightBindingEdge
@@ -35,16 +35,25 @@ class Problem:
                 model_options=self.model_options, cell_parser=self.cell_parser)
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.build_hamiltonian(geometry=self.geometry)
-            # TODO: WaveFunction
-            # wavefunction = WaveFunction(cell_parser=self.cell_parser)
-            # self.Hamiltonian[location]["wavefunction"] = wavefunction.build_wavefunction()
+            # Wavefunction
+            wavefunction = WaveFunction(
+                model_options=self.model_options, cell_parser=self.cell_parser, 
+                tight_binding = tight_binding
+            )
+            self.hamiltonian[key]["wavefunction"] = wavefunction
+            wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
+            wavefunction.build_wavefunction()
     
-    def run(self, H_type="real_space"):
+    def run(self, H_type="real_space", chern=False):
+        location = self.model_options.location 
         for key in self.hamiltonian.keys():
-            if self.model_options.location not in [key, "both"]:
+            if location not in [key, "both"]:
                 continue
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.solve_eigenvalues(self.geometry, H_type)
+            if location == "edge" and  H_type == "reciprocal_space" and chern:
+                wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
+                wavefunction.calculate_chern_invariant(self.geometry, tight_binding.U_k_dict)
     
     def plot(self, plot_type="lattice", location:str=None):
         if plot_type == "lattice":

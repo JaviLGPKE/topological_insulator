@@ -23,7 +23,7 @@ class TightBindingBulk(TightBinding):
         N_subs = len(self.unique_idxs)
         sublattice_connectivity = np.zeros(shape=(N_subs, N_subs))
         # Hamiltonian
-        N_projections = self.n_orbitals * self.n_spins
+        N_projections = 6
         N_sites = len(self.unique_idxs)
         H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
         # Build
@@ -74,10 +74,12 @@ class TightBindingBulk(TightBinding):
             E_k_dict = {}
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
+                    key = f"[{k_x},{k_y}]"
                     k = np.array([k_x, k_y])
+                    # Eigenvalues
                     H_k = self._fourier_transform(geometry, k)
                     E_k, _ = self._solve_eigenvalues(H_k)
-                    E_k_dict[f"[{k_x},{k_y}]"] = E_k
+                    E_k_dict[key] = E_k
             self.E_k_dict = E_k_dict
         else:
             ValueError("Only 'real' and 'reciprocal' problems considered")
@@ -85,7 +87,7 @@ class TightBindingBulk(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
-        N_projections = self.n_orbitals * self.n_spins
+        N_projections = 6
         N_sites = len(self.sublattice_idxs)
         # Hamiltonian
         dims = N_sites * N_projections

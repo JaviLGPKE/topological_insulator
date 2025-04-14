@@ -29,7 +29,7 @@ class TightBindingEdge(TightBinding):
         N_sites = len(unique_idxs)
         sublattice_connectivity = np.zeros(shape=(N_sites, N_sites))
         # Hamiltonian
-        N_projections = self.n_orbitals * self.n_spins
+        N_projections = 6
         H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(unique_idxs)}
@@ -90,20 +90,23 @@ class TightBindingEdge(TightBinding):
             tol = 1e-12 * geometry.lattice_constant
             self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         elif H_type == "reciprocal_space":
-            E_k_dict = {}
+            E_k_dict, U_k_dict = {}, {}
             for k in geometry.k_edge:
+                key = f"{k}"
+                # Eigenvalues
                 H_k = self._fourier_transform(geometry, k)
-                E_k, _ = self._solve_eigenvalues(H_k)
-                E_k_dict[f"{k}"] = E_k
-            self.E_k_dict = E_k_dict
+                E_k, U_k = self._solve_eigenvalues(H_k)
+                E_k_dict[key] = E_k
+                # Eigenstate Coefficients
+                U_k_dict[key] = U_k
+            self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
         else:
             ValueError("Only 'real' and 'reciprocal' problems considered")
         print(f"'Edge' Eigenvalues - Done.")
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
-        a = geometry.lattice_constant
-        N_projections = self.n_orbitals * self.n_spins
+        N_projections = 6
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
         C_k = np.zeros(shape=(N_sites, N_sites), dtype=complex)
@@ -115,9 +118,11 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
             phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict"], self.sublattice_idxs)
+            # Diagonal
             s_ii = site_dict_i["spin_orbit_coupling_dict"][idx_i].copy()
             H_k_ii = s_ii
-            H_k[row_slice, row_slice] = H_k_ii # Diagonal
+            H_k[row_slice, row_slice] = H_k_ii
+            # Off-Diagonal
             for idx_j, idx_j_phase in phase_dict.items():
                 j = idx_map[idx_j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
@@ -141,7 +146,7 @@ class TightBindingEdge(TightBinding):
                     bloch_phase =  np.exp(1j * k * m_ij_phase) 
                     H_k_ij += bloch_phase * t_ij_phase
                     C_k_ij += bloch_phase
-                H_k[row_slice, col_slice] = H_k_ij # Off-Diagonal
+                H_k[row_slice, col_slice] = H_k_ij
                 C_k[i, j] = -1 * C_k_ij
         if self.model_options.solve_connectivity:
             return C_k
