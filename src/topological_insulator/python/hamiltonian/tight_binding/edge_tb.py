@@ -24,7 +24,7 @@ class TightBindingEdge(TightBinding):
             for site_dict in sites_dict.values()
             for idx in site_dict["neighbour_idxs"]
         ]
-        self.unique_idxs = unique_idxs = np.unique(np.array(idxs)) # NOTE: not unique 
+        self.unique_idxs = unique_idxs = np.unique(np.array(idxs))
         # Connectivity
         N_sites = len(unique_idxs)
         sublattice_connectivity = np.zeros(shape=(N_sites, N_sites))

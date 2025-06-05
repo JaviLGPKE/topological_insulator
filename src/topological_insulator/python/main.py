@@ -42,7 +42,7 @@ class Problem:
             )
             self.hamiltonian[key]["wavefunction"] = wavefunction
             wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
-            wavefunction.build_wavefunction()
+            # wavefunction.build_wavefunction()
     
     def run(self, H_type="real_space", chern=False):
         location = self.model_options.location 
@@ -53,7 +53,8 @@ class Problem:
             tight_binding.solve_eigenvalues(self.geometry, H_type)
             if location == "edge" and  H_type == "reciprocal_space" and chern:
                 wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
-                wavefunction.calculate_chern_invariant(self.geometry, tight_binding.U_k_dict)
+                v = wavefunction.calculate_chern_invariant(self.geometry, tight_binding.U_k_dict)
+                wavefunction.chern_number = v
     
     def plot(self, plot_type="lattice", location:str=None):
         if plot_type == "lattice":
