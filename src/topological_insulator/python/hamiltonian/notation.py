@@ -1,7 +1,6 @@
 import numpy as np
 import re
 from matplotlib import pyplot as plt
-from sympy.physics.quantum.cg import CG
 
 class Notation:
 
@@ -25,25 +24,6 @@ class Notation:
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
         self.n_orbitals = len(self.orbitals)
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
-        # Clebsch-Gordan Coefficients
-        self._clebsch_gordan()
-        self.n_projections = (self.n_orbitals * self.n_spins) - 2
-
-    def _clebsch_gordan(self):
-        self.CG_coefficients = {}
-        j_2 = 1/2
-        m_2 = np.arange(-j_2, j_2 + 1, 1)
-        for j_1 in [0, 1]:          
-            m_1 = np.arange(-j_1, j_1 + 1, 1)
-            j_3 = j_1 + j_2
-            m_3 = np.arange(-j_3, j_3 + 1, 1)
-            for i, m_j in enumerate(m_3):
-                for m_l in m_1:
-                    for m_s in m_2:
-                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
-                        if (m_l + m_s) != m_j:
-                            continue
-                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
 
     def l_to_orbitals(self, l, m_l):
         """

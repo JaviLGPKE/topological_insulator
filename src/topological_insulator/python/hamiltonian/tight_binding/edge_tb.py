@@ -152,7 +152,7 @@ class TightBindingEdge(TightBinding):
         else:
             return H_k
 
-    def plot_dispersion(self, geometry: Geometry, legend:bool=True) -> None:
+    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
         k_vals_sorted = k_vals
         E_list = []
@@ -164,7 +164,7 @@ class TightBindingEdge(TightBinding):
         num_bands = E_list.shape[1]
         for band in range(num_bands):
             E = E_list[:, band]
-            if np.allclose(E, 0, rtol=1e-12):
+            if np.allclose(E, 0, rtol=1e-10) and hide:
                 # Ignore zero values
                 continue 
             plt.plot(k_vals_sorted, E, label=f"Band {band}")

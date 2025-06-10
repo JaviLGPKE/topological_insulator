@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import linalg
 from sympy import LeviCivita
+from sympy.physics.quantum.cg import CG
 import re
 from matplotlib import pyplot as plt
 from abc import abstractmethod
@@ -27,6 +28,63 @@ class TightBinding(Notation):
         self.sublattice_data_dict = {}
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
         self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
+        # Clebsch-Gordan Coefficients
+        self.uncoupled_states = [
+            (orb, sigma) 
+            for orb in self.orbitals 
+            for sigma in self.spin_dict.values()
+        ]
+        self.coupled_states =  [
+            (0.5, -0.5), (0.5, 0.5),
+            (1.5, -1.5), (1.5, -0.5), (1.5, 0.5), (1.5, 1.5)
+        ]
+        self.n_projections = len(self.coupled_states)
+        self._clebsch_gordan()
+        self.U = self._coupled_unitary_transform()
+
+    def _clebsch_gordan(self):
+        self.CG_coefficients = {}
+        j_2 = 1/2
+        m_2 = np.arange(-j_2, j_2 + 1, 1)
+        for j_1 in [0, 1]:          
+            m_1 = np.arange(-j_1, j_1 + 1, 1)
+            j_3 = j_1 + j_2
+            m_3 = np.arange(-j_3, j_3 + 1, 1)
+            for i, m_j in enumerate(m_3):
+                for m_l in m_1:
+                    for m_s in m_2:
+                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
+                        if (m_l + m_s) != m_j:
+                            continue
+                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
+    
+    def _coupled_unitary_transform(self):
+        """
+        Transforms the 8x8 Hamiltonian (s + p orbitals with spin-1/2)
+        into the coupled |j, m_j> basis. Returns a transformed 6x6 Hamiltonian.
+
+        Returns
+        -------
+        U : np.ndarray
+            The unitary matrix that transforms the Hamiltonian from a 8x8 to a 6x6 matrix. 
+              total-angular-momentum coupled basis |j, m_j>.
+        """
+        # Unitary Transform
+        M, N = len(self.uncoupled_states), len(self.coupled_states)
+        U = np.zeros(shape=(M, N), dtype=complex)
+        for i, (bra_state, bra_CG) in enumerate(self.CG_coefficients.items()):
+            bra_l   = self.get_quantum_number(bra_state, pos=0)
+            bra_m_l = self.get_quantum_number(bra_state, pos=1)
+            bra_m_s = self.get_quantum_number(bra_state, pos=3)
+            bra_j = bra_l + 1/2
+            bra_m_j = bra_m_l + bra_m_s
+            bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
+            for j, (ket_j, ket_m_j) in enumerate(self.coupled_states):
+                # ket_state = f"|{ket_j},{ket_m_j}>"
+                if (bra_j == ket_j) and (bra_m_j == ket_m_j): 
+                    for bra_orb, bra_coeff in bra_orbitals.items():
+                        U[i, j] += bra_coeff * bra_CG
+        return U
 
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:
@@ -65,13 +123,15 @@ class TightBinding(Notation):
                 j = neighbour_idx
                 label_j = geometry.get_label(j)
                 eigenvalue_dict = self._slater_koster_hoppings(label_i, label_j, cosines)
-                H_ij = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
-                H_i[j] = H_ij
+                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+                H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
+                H_i[j] = H_coupled
         elif eigenvalue_type == "spin_orbit_coupling":
             i = idx
-            eigenvalue_dict = self._spin_orbit_coupling(label_i) 
-            H_ii = self._coupled_unitary_transform(eigenvalue_type, eigenvalue_dict)
-            H_i[i] = H_ii
+            eigenvalue_dict = self._spin_orbit_coupling(label_i)
+            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+            H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
+            H_i[i] = H_coupled
         else:
             raise ValueError(f"'{eigenvalue_type}' not implemented!")  
         return H_i    
@@ -123,8 +183,8 @@ class TightBinding(Notation):
                 # Spin
                 for sigma_1 in self.spin_dict.values():
                     for sigma_2 in self.spin_dict.values():
-                        key = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
-                        eigenvalue_dict[key] = H_t
+                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        eigenvalue_dict[outer_product] = H_t
         return eigenvalue_dict
 
     def _spin_orbit_coupling(self, label_i):
@@ -136,7 +196,7 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
-                        key = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
                         H_SO = 0
                         # p-p
                         if alpha.startswith('p') and beta.startswith('p'):
@@ -146,60 +206,18 @@ class TightBinding(Notation):
                             eps_ijk = LeviCivita(i, j, k)
                             sigma_k = self.pauli_matrix_dict[k]
                             H_SO += 1j * lambda_SO * eps_ijk * sigma_k[n, m]
-                        coupling_dict[key] = H_SO  
+                        coupling_dict[outer_product] = H_SO  
         return coupling_dict
 
-    def _coupled_unitary_transform(self, eigenvalue_type:str, eigenvalue_dict:dict):
-        """
-        Transforms the 8x8 spin-orbit Hamiltonian (s + p orbitals with spin-1/2)
-        into the coupled |j, m_j> basis. Returns a transformed 6x6 Hamiltonian.
-        
-        Parameters
-        ----------
-        eigenvalue_type : str
-            The term in the Hamiltonian e.g. hopping, spin_orbit_coupling, interaction...
-
-        eigenvalue_dict : dict
-            The eigenvalues of the corresponding term in the Hamiltonian. 
-        
-        Returns
-        -------
-        H_ij : np.ndarray
-            The Hamiltonian expressed in the total-angular-momentum coupled basis |j, m_j>.
-        """
-        # Unitary Transform
-        coupled_states = {}
-        for n, (bra_state, CG_bra) in enumerate(self.CG_coefficients.items()):
-            bra_l   = self.get_quantum_number(bra_state, pos=0)
-            bra_m_l = self.get_quantum_number(bra_state, pos=1)
-            bra_m_s = self.get_quantum_number(bra_state, pos=3)
-            bra_sigma = self.spin_dict[bra_m_s]
-            bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
-            j_n = bra_l + 1/2
-            m_j_n = bra_m_l + bra_m_s
-            for m, (ket_key, CG_ket) in enumerate(self.CG_coefficients.items()):
-                ket_l   = self.get_quantum_number(ket_key, pos=0)
-                ket_m_l = self.get_quantum_number(ket_key, pos=1)
-                ket_m_s = self.get_quantum_number(ket_key, pos=3)
-                ket_sigma = self.spin_dict[ket_m_s]
-                j_m = ket_l + 1/2
-                m_j_m = ket_m_l + ket_m_s
-                ket_orbitals = self.l_to_orbitals(ket_l, ket_m_l)
-                H_nm = 0
-                for bra_orb, bra_coeff in bra_orbitals.items():
-                    for ket_orb, ket_coeff in ket_orbitals.items():
-                        if bra_m_s != ket_m_s and eigenvalue_type == "hopping":
-                            # Transitions to opposite spin-states are not allowed
-                            continue
-                        outer_product = f"|{bra_orb},{bra_sigma}><{ket_orb},{ket_sigma}|"
-                        E = eigenvalue_dict[outer_product]
-                        H_nm += CG_bra * CG_ket * bra_coeff * ket_coeff * E
-                coupled_states[f"|{j_n},{m_j_n}><{j_m},{m_j_m}|"] = H_nm
-        # Eigenvalue Entries
-        N = int(len(coupled_states.keys())**0.5)
-        entries = list(coupled_states.values())
-        H_ij =  np.array(entries).reshape(N, N)
-        return H_ij
+    def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):
+        uncoupled_states = self.uncoupled_states
+        N = len(uncoupled_states)
+        H_uncoupled = np.zeros((N, N), dtype=complex)
+        for i, (alpha, sigma_1) in enumerate(uncoupled_states):
+            for j, (beta, sigma_2) in enumerate(uncoupled_states):
+                outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                H_uncoupled[i, j] = eigenvalue_dict[outer_product]
+        return H_uncoupled
 
     @abstractmethod
     def solve_eigenvalues(self, geometry:Geometry, H_type:str):

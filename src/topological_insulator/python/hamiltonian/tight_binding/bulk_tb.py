@@ -125,7 +125,7 @@ class TightBindingBulk(TightBinding):
             sublattice_dict[idx_j_label]["H_k_ij"] += bloch_phase * t_ij
         return sublattice_dict
 
-    def plot_dispersion(self, geometry: Geometry):  
+    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx), len(ky)
         E_k_list = []
@@ -141,7 +141,7 @@ class TightBindingBulk(TightBinding):
         ax = fig.add_subplot(111, projection='3d')
         for band in range(n_bands):
             E = E_3d[:, :, band]
-            if np.allclose(E, 0, rtol=1e-12):
+            if np.allclose(E, 0, rtol=1e-10) and hide:
                 # Ignore zero values
                 continue 
             ax.plot_surface(
