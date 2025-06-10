@@ -9,7 +9,8 @@ from ...geometry import Geometry
 
 from IPython import embed
 
-class TightBindingEdge(TightBinding):  
+class TightBindingEdge(TightBinding):
+  
     def __init__(self, model_options, cell_parser):
         super().__init__(model_options, cell_parser)
         self.location = "edge"  
@@ -29,7 +30,7 @@ class TightBindingEdge(TightBinding):
         N_sites = len(unique_idxs)
         sublattice_connectivity = np.zeros(shape=(N_sites, N_sites))
         # Hamiltonian
-        N_projections = 6
+        N_projections = self.n_projections
         H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(unique_idxs)}
@@ -83,30 +84,28 @@ class TightBindingEdge(TightBinding):
     def solve_eigenvalues(self, geometry:Geometry, H_type:str):
         print(f"Calculating 'Edge' eigenvalues...")
         start = perf_counter()
-        if H_type == "real_space":
+        if H_type == "real":
             H = self.H
             self.E, U = self._solve_eigenvalues(H)
             H_diag = U.conj().T @ H @ U
             tol = 1e-12 * geometry.lattice_constant
             self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
-        elif H_type == "reciprocal_space":
+        elif H_type in ["momentum", "reciprocal"]:
             E_k_dict, U_k_dict = {}, {}
             for k in geometry.k_edge:
                 key = f"{k}"
-                # Eigenvalues
                 H_k = self._fourier_transform(geometry, k)
                 E_k, U_k = self._solve_eigenvalues(H_k)
-                E_k_dict[key] = E_k
-                # Eigenstate Coefficients
-                U_k_dict[key] = U_k
+                E_k_dict[key] = E_k # Eigenvalues
+                U_k_dict[key] = U_k # Eigenstates
             self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
         else:
             ValueError("Only 'real' and 'reciprocal' problems considered")
-        print(f"'Edge' Eigenvalues - Done.")
+        print(f"'Edge' Eigenvalues - Done!")
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
-        N_projections = 6
+        N_projections = self.n_projections
         N_sites = len(self.sublattice_idxs)
         dims = N_sites * N_projections
         C_k = np.zeros(shape=(N_sites, N_sites), dtype=complex)
@@ -153,7 +152,7 @@ class TightBindingEdge(TightBinding):
         else:
             return H_k
 
-    def plot_dispersion(self, geometry: Geometry) -> None:
+    def plot_dispersion(self, geometry: Geometry, legend:bool=True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
         k_vals_sorted = k_vals
         E_list = []
@@ -172,5 +171,6 @@ class TightBindingEdge(TightBinding):
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy")
         plt.title("Edge Band Structure")
-        # plt.legend()
+        if legend:
+            plt.legend()
         plt.show()

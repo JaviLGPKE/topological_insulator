@@ -23,7 +23,7 @@ class TightBindingBulk(TightBinding):
         N_subs = len(self.unique_idxs)
         sublattice_connectivity = np.zeros(shape=(N_subs, N_subs))
         # Hamiltonian
-        N_projections = 6
+        N_projections = self.n_projections
         N_sites = len(self.unique_idxs)
         H = np.zeros((N_sites * N_projections, N_sites * N_projections), dtype=complex)
         # Build
@@ -64,32 +64,31 @@ class TightBindingBulk(TightBinding):
         tol = 1e-12 * geometry.lattice_constant
         print(f"Calculating 'Bulk' eigenvalues...")
         start = perf_counter()
-        if H_type == "real_space":
+        if H_type == "real":
             H = self.H
             self.E, U = self._solve_eigenvalues(H)
             H_diag = U.conj().T @ H @ U
             tol = 1e-12 * geometry.lattice_constant
             self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
-        elif H_type == "reciprocal_space":
-            E_k_dict = {}
+        elif H_type in ["momentum", "reciprocal"]:
+            E_k_dict, U_k_dict = {}, {}
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
                     key = f"[{k_x},{k_y}]"
                     k = np.array([k_x, k_y])
-                    # Eigenvalues
                     H_k = self._fourier_transform(geometry, k)
-                    E_k, _ = self._solve_eigenvalues(H_k)
-                    E_k_dict[key] = E_k
-            self.E_k_dict = E_k_dict
+                    E_k, U_k = self._solve_eigenvalues(H_k)
+                    E_k_dict[key] = E_k # Eigenvalues
+                    U_k_dict[key] = U_k # Eigenstates
+            self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
         else:
-            ValueError("Only 'real' and 'reciprocal' problems considered")
-        print(f"'Bulk' Eigenvalues - Done.")
+            ValueError("Only 'real' and 'reciprocal'/'momentum' problems considered")
+        print(f"'Bulk' Eigenvalues - Done!")
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
-        N_projections = 6
+        N_projections = self.n_projections
         N_sites = len(self.sublattice_idxs)
-        # Hamiltonian
         dims = N_sites * N_projections
         C_k = np.zeros(shape=(N_sites, N_sites), dtype=complex)
         H_k = np.zeros(shape=(dims, dims), dtype=complex)
@@ -107,7 +106,7 @@ class TightBindingBulk(TightBinding):
             return C_k
         else:
             return H_k
-    
+
     def get_sublattice_dict(self, geometry, N_sites, data, k):
         sublattice_dict = {geometry.label_mapper[n]: {
                 "C_k_ij":0, "H_k_ij": 0} for n in range(N_sites)}

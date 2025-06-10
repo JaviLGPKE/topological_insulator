@@ -152,12 +152,15 @@ class TightBinding(Notation):
     def _coupled_unitary_transform(self, eigenvalue_type:str, eigenvalue_dict:dict):
         """
         Transforms the 8x8 spin-orbit Hamiltonian (s + p orbitals with spin-1/2)
-        into the coupled |j, m_j> basis. Returns the transformed 8x8 matrix.
+        into the coupled |j, m_j> basis. Returns a transformed 6x6 Hamiltonian.
         
         Parameters
         ----------
-        state_hoppings : dict
-            The Hamiltonian spin-orbit uncoupled state hoppings. 
+        eigenvalue_type : str
+            The term in the Hamiltonian e.g. hopping, spin_orbit_coupling, interaction...
+
+        eigenvalue_dict : dict
+            The eigenvalues of the corresponding term in the Hamiltonian. 
         
         Returns
         -------
@@ -207,11 +210,11 @@ class TightBinding(Notation):
         if H_type == "real_space":
             self.E = None
         elif H_type == "reciprocal_space":
-            self.E_k_dict = None
+            self.E_k_dict, self.U_k_dict = None, None
         raise NotImplementedError("'solve_eigenvalues' method not implemented")
 
     def _solve_eigenvalues(self, H):
-        E, U = linalg.eigh(H, check_finite=False, driver="evr")
+        E, U = linalg.eigh(H, lower=True, check_finite=False, driver="evr")
         return E, U
 
     @abstractmethod
@@ -219,6 +222,7 @@ class TightBinding(Notation):
         raise NotImplementedError("Implement dispersion plot method!")
 
     def plot_band_structure(self, geometry: Geometry):
+        raise NotImplementedError("Implement band structure plot method!")
         # TODO:
         # assert(self.model_options.band_structure)
         print("Plotting band structure...")

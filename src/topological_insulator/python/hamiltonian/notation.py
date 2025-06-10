@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from sympy.physics.quantum.cg import CG
 
 class Notation:
+
     def __init__(self):
         self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         # Spin
@@ -26,6 +27,7 @@ class Notation:
         self.state_pattern = re.compile(r'\|([\d\.\-]+),([\d\.\-]+);([\d\.\-]+),([\d\.\-]+)\>')
         # Clebsch-Gordan Coefficients
         self._clebsch_gordan()
+        self.n_projections = (self.n_orbitals * self.n_spins) - 2
 
     def _clebsch_gordan(self):
         self.CG_coefficients = {}
