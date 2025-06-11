@@ -27,7 +27,7 @@ class Problem:
         self.geometry.build_lattice()
         # Hamiltonian
         for key in self.hamiltonian.keys():
-            # Tight-Binding Model
+            # Tight-Binding Approximation
             if location not in [key, "both"]:
                 continue
             TB = TightBindingBulk if key == "bulk" else TightBindingEdge
@@ -35,21 +35,31 @@ class Problem:
                 model_options=self.model_options, cell_parser=self.cell_parser)
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.build_hamiltonian(geometry=self.geometry)
-            # TODO: WaveFunction
-            # wavefunction = WaveFunction(cell_parser=self.cell_parser)
-            # self.Hamiltonian[location]["wavefunction"] = wavefunction.build_wavefunction()
     
-    def run(self, H_type="real_space"):
+    def run(self, H_type="real"):
+        location = self.model_options.location 
+        if location not in ["both", "edge", "bulk"]:
+            raise ValueError("Only 'bulk' or 'edge' cases considered.")
         for key in self.hamiltonian.keys():
-            if self.model_options.location not in [key, "both"]:
+            if location not in [key, "both"]:
                 continue
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.solve_eigenvalues(self.geometry, H_type)
+            # Wavefunction
+            wavefunction = WaveFunction(
+                model_options=self.model_options, cell_parser=self.cell_parser, 
+                geometry=self.geometry, tight_binding = tight_binding
+            )
+            self.hamiltonian[key]["wavefunction"] = wavefunction
+            wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
     
-    def plot(self, plot_type="lattice", location:str=None):
+    def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, F=None):
         if plot_type == "lattice":
             self.geometry.plot_lattice()
         elif plot_type == "dispersion":
             tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
-            tight_binding.plot_dispersion(self.geometry)
+            tight_binding.plot_dispersion(self.geometry, legend, hide)
+        elif plot_type == "berry_flux":
+            wavefunction:WaveFunction = self.hamiltonian[location]["wavefunction"]
+            wavefunction.plot_berry_flux(F)
             
