@@ -137,7 +137,7 @@ class TightBindingBulk(TightBinding):
         E_3d = E_stacked.reshape(n_kx, n_ky, -1)
         n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
         KX, KY = np.meshgrid(kx, ky, indexing='ij') 
-        fig = plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
         for band in range(n_bands):
             E = E_3d[:, :, band]

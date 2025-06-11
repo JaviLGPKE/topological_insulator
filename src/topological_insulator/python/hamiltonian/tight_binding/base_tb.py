@@ -40,7 +40,8 @@ class TightBinding(Notation):
         ]
         self.n_projections = len(self.coupled_states)
         self._clebsch_gordan()
-        self.U = self._coupled_unitary_transform()
+        self.U = self._coupled_unitary_transform(transition_type="unrestricted")
+        self.U_r = self._coupled_unitary_transform(transition_type="restricted")
 
     def _clebsch_gordan(self):
         self.CG_coefficients = {}
@@ -57,17 +58,16 @@ class TightBinding(Notation):
                         if (m_l + m_s) != m_j:
                             continue
                         self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
-    
-    def _coupled_unitary_transform(self):
+
+    def _coupled_unitary_transform(self, transition_type:str="unrestricted"):
         """
-        Transforms the 8x8 Hamiltonian (s + p orbitals with spin-1/2)
+        Transforms the 8x8 Hamiltonian (s, p orbitals with spin-1/2)
         into the coupled |j, m_j> basis. Returns a transformed 6x6 Hamiltonian.
 
         Returns
         -------
         U : np.ndarray
             The unitary matrix that transforms the Hamiltonian from a 8x8 to a 6x6 matrix. 
-              total-angular-momentum coupled basis |j, m_j>.
         """
         # Unitary Transform
         M, N = len(self.uncoupled_states), len(self.coupled_states)
@@ -83,6 +83,7 @@ class TightBinding(Notation):
                 # ket_state = f"|{ket_j},{ket_m_j}>"
                 if (bra_j == ket_j) and (bra_m_j == ket_m_j): 
                     for bra_orb, bra_coeff in bra_orbitals.items():
+                        # if (transition_type == "restricted") and ():
                         U[i, j] += bra_coeff * bra_CG
         return U
 

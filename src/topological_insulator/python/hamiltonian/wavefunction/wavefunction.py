@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib import pyplot as plt
 
 from ..notation import Notation
 from ...model_options import ModelOptions
@@ -37,44 +38,52 @@ class WaveFunction(Notation):
     def get_chern_invariant(self, band: int = 0, tol=1e-6):
         """
         Compute the Chern invariant for a single band using
-        the Fukui-Hatsugai-Suzuki discretization on a N_x N_y k-grid.
+        the Fukui-Hatsugai-Suzuki discretization on a N_x, N_y k-grid.
         """
-        assert(self.model_options.location in ["both", "bulk"])
-        geometry = self.geometry
-        N_k = geometry.N_k
-        k_x = geometry.kx_bulk
-        k_y = geometry.ky_bulk
-        U_k_dict = self.tight_binding.U_k_dict
-        # Chern Invariant
-        print(f"Calculating Chern Invariant...")
-        F = np.zeros((N_k-1, N_k-1)) # Berry Flux
-        for i in range(N_k - 1):
-            for j in range(N_k - 1):
-                k = (k_x[i],    k_y[j]) # current
-                k_x_p = (k_x[i+1], k_y[j]) # right
-                k_y_p = (k_x[i],   k_y[j+1]) # up
-                k_xy_pp = (k_x[i+1], k_y[j+1]) # diagonal-up-right
-                # Band Eigenstates
-                u = U_k_dict[f"[{k[0]},{k[1]}]"][:, band]
-                u_x = U_k_dict[f"[{k_x_p[0]},{k_x_p[1]}]"][:, band]
-                u_y = U_k_dict[f"[{k_y_p[0]},{k_y_p[1]}]"][:, band]
-                u_xy= U_k_dict[f"[{k_xy_pp[0]},{k_xy_pp[1]}]"][:, band]
-                # Link U_n(k) = <u(k)|u(k+dn)>
-                S_1 = np.dot(u, u_x)
-                S_2 = np.dot(u_x, u_xy)
-                S_3 = np.dot(u_xy, u_y)
-                S_4 = np.dot(u_y, u)
-                U_1 = self._phase(S_1, tol)
-                U_2 = self._phase(S_2, tol)
-                U_3 = self._phase(S_3, tol)
-                U_4 = self._phase(S_4, tol)
-                # Berry flux F = Arg( U1 * U2 * U3 * U4 )
-                F_ij = np.angle(U_1 * U_2 * U_3 * U_4)
-                F[i, j] = F_ij
+        assert self.model_options.location in ["both", "bulk"]
+        geom = self.geometry
+        N_k = geom.N_k
+        kx = geom.kx_bulk
+        ky = geom.ky_bulk
+        U_k = self.tight_binding.U_k_dict
+
+        F = np.zeros((N_k, N_k), dtype=float)
+        for i in range(N_k):
+            ip = (i + 1) % N_k # periodic BC k_x wrap-around
+            for j in range(N_k):
+                jp = (j + 1) % N_k # periodic BC k_y wrap-around
+                u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
+                u_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, band]
+                u_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, band]
+                u_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, band]
+                # Links: U_n(1) = ⟨u|u_+dn⟩/|⟨u|u+dn⟩|
+                U1 = self._phase(np.vdot(u,   u_x), tol)
+                U2 = self._phase(np.vdot(u_x, u_xy), tol)
+                U3 = self._phase(np.vdot(u_xy,u_y), tol)
+                U4 = self._phase(np.vdot(u_y,   u), tol)
+                # Berry flux: F = Arg( U1 * U2 * U3 * U4 )
+                F[i, j] = np.angle(U1 * U2 * U3 * U4)
         C = F.sum() / (2 * np.pi)
-        print(f"Chern Invariant - Done!")
-        return C, F
+        return np.round(C), F
+
     
     def _phase(self, S, tol):
         norm = np.abs(S)
-        return S / norm if norm > tol else 1.0
+        return (S / norm) if norm > tol else (1 + 0j)
+    
+    def plot_berry_flux(self, F:np.ndarray=None):
+        g = self.geometry
+        k_x, k_y = g.kx_bulk, g.ky_bulk
+        KX_full, KY_full = np.meshgrid(k_x, k_y, indexing='ij')
+        fig = plt.figure(figsize=(6,6))
+        ax  = fig.add_subplot(111, projection='3d')
+        surf = ax.plot_surface(
+            KX_full, KY_full, F, 
+            rcount=F.shape[0], ccount=F.shape[1],
+            linewidth=0, antialiased=True
+        )
+        ax.set_xlabel(r'$k_x$')
+        ax.set_ylabel(r'$k_y$')
+        ax.set_zlabel(r'$F$')
+        plt.tight_layout()
+        plt.show()

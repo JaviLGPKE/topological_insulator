@@ -160,7 +160,7 @@ class TightBindingEdge(TightBinding):
             E_k = self.E_k_dict[key]
             E_list.append(E_k)
         E_list = np.array(E_list)
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(10, 8))
         num_bands = E_list.shape[1]
         for band in range(num_bands):
             E = E_list[:, band]
