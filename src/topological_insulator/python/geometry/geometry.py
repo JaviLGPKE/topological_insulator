@@ -104,9 +104,13 @@ class Geometry:
     def _build_brillouine_zone(self):
         N_k = self.N_k
         a = self.lattice_constant
-        a1, a2 = self.a1, self.a2
-        factor = 2
+        a1, a2= np.array(self.a1), np.array(self.a2)
+        # Area of the parallelogram
+        A = a1[0]*a2[1] - a1[1]*a2[0]
+        self.b1 = (2*np.pi/A) * np.array([ a2[1], -a2[0] ])
+        self.b2 = (2*np.pi/A) * np.array([ -a1[1],  a1[0] ])
         # Bulk
+        factor = 2
         if self.model_options.BZ == "reduced":
             discretization = np.linspace(-np.pi/a, np.pi/a, N_k)
         elif self.model_options.BZ == "extended":
@@ -128,22 +132,6 @@ class Geometry:
             else:
                 raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
             self.k_edge = discretization_edge
-
-        # TODO: Generate high-symmetry path for band structure
-        # if self.model_options.band_structure:
-            # gamma = np.array([0.0, 0.0])
-            # k_point = np.array([1/3, 1/3])
-            # m_point = np.array([0.5, 0.0])
-            # path = [gamma, k_point, m_point, gamma]
-            # self.k_path = []
-            # for i in range(len(path)-1):
-            #     start = path[i]
-            #     end = path[i+1]
-            #     for r in np.linspace(0, 1, N_r**2):
-            #         frac_coords = (1 - r)*start + r*end
-            #         k = frac_coords[0]*b1 + frac_coords[1]*b2
-            #         self.k_path.append(k)
-            # self.k_path = np.array(self.k_path)
 
     def get_location_idx(self, location:str):
         a = self.lattice_constant

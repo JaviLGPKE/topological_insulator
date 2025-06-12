@@ -38,7 +38,7 @@ class TightBinding(Notation):
             (0.5, -0.5), (0.5, 0.5),
             (1.5, -1.5), (1.5, -0.5), (1.5, 0.5), (1.5, 1.5)
         ]
-        self.n_projections = len(self.coupled_states)
+        self.n_projections = 8 #len(self.coupled_states)
         self._clebsch_gordan()
         self.U = self._coupled_unitary_transform(transition_type="unrestricted")
         self.U_r = self._coupled_unitary_transform(transition_type="restricted")
@@ -70,6 +70,7 @@ class TightBinding(Notation):
             The unitary matrix that transforms the Hamiltonian from a 8x8 to a 6x6 matrix. 
         """
         # Unitary Transform
+        # TODO: missing 1/2, -1/2 from p-orbital coupling spin
         M, N = len(self.uncoupled_states), len(self.coupled_states)
         U = np.zeros(shape=(M, N), dtype=complex)
         for i, (bra_state, bra_CG) in enumerate(self.CG_coefficients.items()):
@@ -81,7 +82,7 @@ class TightBinding(Notation):
             bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
             for j, (ket_j, ket_m_j) in enumerate(self.coupled_states):
                 # ket_state = f"|{ket_j},{ket_m_j}>"
-                if (bra_j == ket_j) and (bra_m_j == ket_m_j): 
+                if (bra_j == ket_j) and (bra_m_j == ket_m_j):
                     for bra_orb, bra_coeff in bra_orbitals.items():
                         # if (transition_type == "restricted") and ():
                         U[i, j] += bra_coeff * bra_CG
@@ -125,14 +126,14 @@ class TightBinding(Notation):
                 label_j = geometry.get_label(j)
                 eigenvalue_dict = self._slater_koster_hoppings(label_i, label_j, cosines)
                 H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
-                H_i[j] = H_coupled
+                H_coupled = self.U.conj().T @ H_uncoupled @ self.U
+                H_i[j] = H_uncoupled
         elif eigenvalue_type == "spin_orbit_coupling":
             i = idx
             eigenvalue_dict = self._spin_orbit_coupling(label_i)
             H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
-            H_i[i] = H_coupled
+            H_i[i] = H_uncoupled
         else:
             raise ValueError(f"'{eigenvalue_type}' not implemented!")  
         return H_i    
@@ -185,7 +186,10 @@ class TightBinding(Notation):
                 for sigma_1 in self.spin_dict.values():
                     for sigma_2 in self.spin_dict.values():
                         outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
-                        eigenvalue_dict[outer_product] = H_t
+                        if sigma_1 == sigma_2:
+                            eigenvalue_dict[outer_product] = H_t
+                        else:
+                            eigenvalue_dict[outer_product] = 0
         return eigenvalue_dict
 
     def _spin_orbit_coupling(self, label_i):
@@ -197,17 +201,22 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
-                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
                         H_SO = 0
-                        # p-p
-                        if alpha.startswith('p') and beta.startswith('p'):
-                            i = self.direction_index[alpha.split('_')[1]]
-                            j = self.direction_index[beta.split('_')[1]]
-                            k = (set(self.direction_index.values()) - {i, j}).pop()
-                            eps_ijk = LeviCivita(i, j, k)
-                            sigma_k = self.pauli_matrix_dict[k]
-                            H_SO += 1j * lambda_SO * eps_ijk * sigma_k[n, m]
+                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        if alpha == "s" and beta == "s" and (sigma_2 == sigma_1):
+                            if label_i == "A":
+                                H_SO += -0.1
+                            elif label_i == "B":
+                                H_SO += 0.1
                         coupling_dict[outer_product] = H_SO  
+                        # p-p
+                        # if alpha.startswith('p') and beta.startswith('p'):
+                        #     i = self.direction_index[alpha.split('_')[1]]
+                        #     j = self.direction_index[beta.split('_')[1]]
+                        #     k = (set(self.direction_index.values()) - {i, j}).pop()
+                        #     eps_ijk = LeviCivita(i, j, k)
+                        #     sigma_k = self.pauli_matrix_dict[k]
+                        #     H_SO += 1j * lambda_SO * eps_ijk * sigma_k[n, m]
         return coupling_dict
 
     def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):

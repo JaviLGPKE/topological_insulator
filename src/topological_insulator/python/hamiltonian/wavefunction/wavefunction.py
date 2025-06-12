@@ -61,7 +61,7 @@ class WaveFunction(Notation):
                 U2 = self._phase(np.vdot(u_x, u_xy), tol)
                 U3 = self._phase(np.vdot(u_xy,u_y), tol)
                 U4 = self._phase(np.vdot(u_y,   u), tol)
-                # Berry flux: F = Arg( U1 * U2 * U3 * U4 )
+                # Berry flux: F = Arg(U1 * U2 * U3 * U4)
                 F[i, j] = np.angle(U1 * U2 * U3 * U4)
         C = F.sum() / (2 * np.pi)
         return np.round(C), F

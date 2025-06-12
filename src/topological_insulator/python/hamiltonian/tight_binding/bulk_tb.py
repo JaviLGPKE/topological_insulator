@@ -154,4 +154,78 @@ class TightBindingBulk(TightBinding):
         ax.set_ylabel(r'$k_y$', fontsize=12)
         ax.set_zlabel(r'$E$', fontsize=12)
         plt.title('Bulk Band Structure', fontsize=14)
+        if legend:
+            plt.legend()
+        plt.show()
+
+    def plot_band_structure(self, geometry):
+        """
+        Plot band-structure along G → K → M → K' → G
+        in a hexagonal BZ, automatically computing the
+        reciprocal vectors from geometry.a1, geometry.a2.
+        """
+        Nk_per_segment = geometry.N_k * 30
+        b1, b2 = geometry.b1, geometry.b2
+        Gamma = (0.0, 0.0)
+        K     = ((b1 + b2)/3).tolist()
+        Kp    = ((2*b1 + b2)/3).tolist()
+        M     = (0.5*b1).tolist()
+        path = [
+        ("G",  Gamma),
+        ("K",  K),
+        ("M",  M),
+        ("K'", Kp),
+        ("G",  Gamma),
+        ]
+        kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
+        n_kx, n_ky = len(kx_grid), len(ky_grid)
+        first_key = next(iter(self.E_k_dict))
+        n_bands   = self.E_k_dict[first_key].shape[0]
+        E_3d = np.zeros((n_kx, n_ky, n_bands))
+        for ix, kx in enumerate(kx_grid):
+            for iy, ky in enumerate(ky_grid):
+                key = f"[{kx},{ky}]"
+                E_3d[ix, iy, :] = self.E_k_dict[key]
+        # 1) Build the high‐symmetry k‐path + cumulative distance
+        kpoints = []
+        dist    = [0.0]
+        ticks   = []
+        labels  = []
+        cumd    = 0.0
+        for idx in range(len(path)-1):
+            lbl_i, k_i = path[idx]
+            lbl_j, k_j = path[idx+1]
+            ticks.append(cumd)
+            labels.append(lbl_i)
+            for t in range(Nk_per_segment):
+                frac = t / Nk_per_segment
+                kx = k_i[0] + frac*(k_j[0]-k_i[0])
+                ky = k_i[1] + frac*(k_j[1]-k_i[1])
+                if kpoints:
+                    dk = np.hypot(kx - kpoints[-1][0], ky - kpoints[-1][1])
+                    cumd += dk
+                kpoints.append((kx, ky))
+                dist.append(cumd)
+        ticks.append(cumd)
+        labels.append(path[-1][0])
+        # 2) Get the nearest grid index:
+        indices = []
+        for kx, ky in kpoints:
+            ix = np.argmin(np.abs(kx_grid - kx))
+            iy = np.argmin(np.abs(ky_grid - ky))
+            indices.append((ix, iy))
+        # 3) Build E_path by indexing into E_3d
+        E_path = np.array([E_3d[ix, iy, :] for (ix, iy) in indices])
+        dist = dist[:len(kpoints)]
+        # 4) Plot
+        fig, ax = plt.subplots(figsize=(8,5))
+        for band in range(n_bands):
+            ax.plot(dist, E_path[:, band], lw=1.5)
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels)
+        ax.set_xlim(dist[0], dist[-1])
+        ax.set_xlabel("k-path", fontsize=12)
+        ax.set_ylabel("Energy", fontsize=12)
+        ax.grid(True, ls="--", lw=0.5)
+        plt.tight_layout()
         plt.show()

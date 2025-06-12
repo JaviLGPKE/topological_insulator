@@ -53,7 +53,8 @@ class Problem:
             self.hamiltonian[key]["wavefunction"] = wavefunction
             wavefunction:WaveFunction = self.hamiltonian[key]["wavefunction"]
     
-    def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, F=None):
+    def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, 
+                F=None):
         if plot_type == "lattice":
             self.geometry.plot_lattice()
         elif plot_type == "dispersion":
@@ -62,4 +63,7 @@ class Problem:
         elif plot_type == "berry_flux":
             wavefunction:WaveFunction = self.hamiltonian[location]["wavefunction"]
             wavefunction.plot_berry_flux(F)
-            
+        elif plot_type == "high_symmetry":
+            assert(location == "bulk")
+            tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
+            tight_binding.plot_band_structure(self.geometry)
