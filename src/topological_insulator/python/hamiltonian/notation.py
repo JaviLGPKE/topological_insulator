@@ -20,6 +20,20 @@ class Notation:
                 [[1, 0],
                 [0, -1]])
         }
+        self.angular_momentum_operator_dict = {
+            0: np.array(
+                [[0, 0, 0],
+                [0, 0,-1j],
+                [0, 1j, 0]]),
+            1: np.array(
+                [[0, 0, 1j],
+                [0, 0, 0 ],
+                [-1j, 0, 0]]),
+            2: np.array(
+                [[0, -1j, 0],
+                [1j, 0, 0],
+                [0, 0, 0]])
+        }
         # Orbitals
         self.orbitals = ['s', 'p_x', 'p_y', 'p_z']
         self.n_orbitals = len(self.orbitals)

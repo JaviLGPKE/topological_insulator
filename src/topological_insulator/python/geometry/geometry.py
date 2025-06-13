@@ -45,7 +45,6 @@ class Geometry:
         self._build_lattice(N_r)
         self._set_connectivity()
         self._build_brillouine_zone()
-        # self.convex_hull = ConvexHull(self.sites)
         print(f"Geometry - Done.")
 
     def _build_lattice(self, N_r):
@@ -102,10 +101,13 @@ class Geometry:
         return self.sublattice_labels[self.sublattice_label_idxs[idx]]
 
     def _build_brillouine_zone(self):
+        factor = 2
         N_k = self.N_k
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
-        factor = 2
+        A = a1[0]*a2[1] - a1[1]*a2[0]
+        self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
+        self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
         # Bulk
         if self.model_options.BZ == "reduced":
             discretization = np.linspace(-np.pi/a, np.pi/a, N_k)
@@ -128,22 +130,6 @@ class Geometry:
             else:
                 raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
             self.k_edge = discretization_edge
-
-        # TODO: Generate high-symmetry path for band structure
-        # if self.model_options.band_structure:
-            # gamma = np.array([0.0, 0.0])
-            # k_point = np.array([1/3, 1/3])
-            # m_point = np.array([0.5, 0.0])
-            # path = [gamma, k_point, m_point, gamma]
-            # self.k_path = []
-            # for i in range(len(path)-1):
-            #     start = path[i]
-            #     end = path[i+1]
-            #     for r in np.linspace(0, 1, N_r**2):
-            #         frac_coords = (1 - r)*start + r*end
-            #         k = frac_coords[0]*b1 + frac_coords[1]*b2
-            #         self.k_path.append(k)
-            # self.k_path = np.array(self.k_path)
 
     def get_location_idx(self, location:str):
         a = self.lattice_constant
@@ -188,6 +174,32 @@ class Geometry:
         C = self.connectivity_matrix
         neighbours_idx = np.where(C[idx, :] == 1)[0]
         return neighbours_idx
+
+    def get_next_neighbour_idxs(self, site_idx, atol=1e-8):
+        """Find all sites at |a1| distance from the given site."""
+        base_pos = self.sites[site_idx]
+        target_d2 = np.dot(self.a1, self.a1)
+        diffs = self.sites - base_pos
+        d2 = np.einsum('ij,ij->i', diffs, diffs)
+        mask = np.isclose(d2, target_d2, atol=atol)
+        mask[site_idx] = False
+        return np.nonzero(mask)[0].tolist()
+
+    def get_chirality(self, site_i, site_j):
+        neighbours_i = self.get_neighbour_idxs(site_i)
+        neighbours_j = self.get_neighbour_idxs(site_j)
+        shared_neighbors = set(neighbours_i).intersection(neighbours_j)
+        if not shared_neighbors:
+            raise ValueError(f"No shared neighbor between {site_i} and {site_j}")
+        k = next(iter(shared_neighbors))  # Take the first shared neighbor
+        r_i = np.array(self.sites[site_i])
+        r_j = np.array(self.sites[site_j])
+        r_k = np.array(self.sites[k])
+        d1 = r_k - r_i
+        d2 = r_j - r_k
+        cross_z = d1[0] * d2[1] - d1[1] * d2[0]
+        nu_ij = int(np.sign(cross_z))
+        return nu_ij
 
     def get_dr(self, location, bulk_idx, neighbour_idxs, type="list"):
         dr_list, dm_list = [], []

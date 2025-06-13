@@ -107,9 +107,9 @@ class TightBindingEdge(TightBinding):
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
         N_projections = self.n_projections
         N_sites = len(self.sublattice_idxs)
-        dims = N_sites * N_projections
+        N = N_sites * N_projections
         C_k = np.zeros(shape=(N_sites, N_sites), dtype=complex)
-        H_k = np.zeros(shape=(dims, dims), dtype=complex)
+        H_k = np.zeros(shape=(N, N), dtype=complex)
         # Build
         idx_map = {idx: pos for pos, idx in enumerate(self.sublattice_idxs)}
         for idx_i in self.sublattice_idxs:

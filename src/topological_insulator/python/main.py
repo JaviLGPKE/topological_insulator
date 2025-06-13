@@ -59,6 +59,10 @@ class Problem:
         elif plot_type == "dispersion":
             tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
             tight_binding.plot_dispersion(self.geometry, legend, hide)
+        elif plot_type == "high_symmetry":
+            assert(location == "bulk")
+            tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
+            tight_binding.plot_band_structure(self.geometry)
         elif plot_type == "berry_flux":
             wavefunction:WaveFunction = self.hamiltonian[location]["wavefunction"]
             wavefunction.plot_berry_flux(F)

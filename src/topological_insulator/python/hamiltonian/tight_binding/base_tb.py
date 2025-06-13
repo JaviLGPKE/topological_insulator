@@ -1,9 +1,6 @@
 import numpy as np
 from scipy import linalg
 from sympy import LeviCivita
-from sympy.physics.quantum.cg import CG
-import re
-from matplotlib import pyplot as plt
 from abc import abstractmethod
 
 from ..notation import Notation
@@ -34,57 +31,54 @@ class TightBinding(Notation):
             for orb in self.orbitals 
             for sigma in self.spin_dict.values()
         ]
-        self.coupled_states =  [
-            (0.5, -0.5), (0.5, 0.5),
-            (1.5, -1.5), (1.5, -0.5), (1.5, 0.5), (1.5, 1.5)
-        ]
-        self.n_projections = len(self.coupled_states)
-        self._clebsch_gordan()
-        self.U = self._coupled_unitary_transform(transition_type="unrestricted")
-        self.U_r = self._coupled_unitary_transform(transition_type="restricted")
+        self.n_projections = len(self.uncoupled_states)
+        self.U = self._coupled_unitary_transform()
 
-    def _clebsch_gordan(self):
-        self.CG_coefficients = {}
-        j_2 = 1/2
-        m_2 = np.arange(-j_2, j_2 + 1, 1)
-        for j_1 in [0, 1]:          
-            m_1 = np.arange(-j_1, j_1 + 1, 1)
-            j_3 = j_1 + j_2
-            m_3 = np.arange(-j_3, j_3 + 1, 1)
-            for i, m_j in enumerate(m_3):
-                for m_l in m_1:
-                    for m_s in m_2:
-                        state = f"|{j_1},{m_l};{j_2},{m_s}>"
-                        if (m_l + m_s) != m_j:
-                            continue
-                        self.CG_coefficients[state] = CG(j_1, m_l, j_2, m_s, j_3, m_j).doit()
-
-    def _coupled_unitary_transform(self, transition_type:str="unrestricted"):
+    def _coupled_unitary_transform(self):
         """
-        Transforms the 8x8 Hamiltonian (s, p orbitals with spin-1/2)
-        into the coupled |j, m_j> basis. Returns a transformed 6x6 Hamiltonian.
+        Transforms the 8x8 Hamiltonian from uncoupled orbital/spin basis 
+        to coupled angular momentum basis, using the Clebsch-Gordan coefficients.
 
         Returns
         -------
         U : np.ndarray
-            The unitary matrix that transforms the Hamiltonian from a 8x8 to a 6x6 matrix. 
+            The unitary matrix. 
         """
-        # Unitary Transform
-        M, N = len(self.uncoupled_states), len(self.coupled_states)
-        U = np.zeros(shape=(M, N), dtype=complex)
-        for i, (bra_state, bra_CG) in enumerate(self.CG_coefficients.items()):
-            bra_l   = self.get_quantum_number(bra_state, pos=0)
-            bra_m_l = self.get_quantum_number(bra_state, pos=1)
-            bra_m_s = self.get_quantum_number(bra_state, pos=3)
-            bra_j = bra_l + 1/2
-            bra_m_j = bra_m_l + bra_m_s
-            bra_orbitals = self.l_to_orbitals(bra_l, bra_m_l)
-            for j, (ket_j, ket_m_j) in enumerate(self.coupled_states):
-                # ket_state = f"|{ket_j},{ket_m_j}>"
-                if (bra_j == ket_j) and (bra_m_j == ket_m_j): 
-                    for bra_orb, bra_coeff in bra_orbitals.items():
-                        # if (transition_type == "restricted") and ():
-                        U[i, j] += bra_coeff * bra_CG
+        N = len(self.uncoupled_states)
+        U = np.zeros((N, N), dtype=complex)
+        U[0, 0] = 1  # |s, j=1/2, m_j=+1/2⟩ = |s↑⟩
+        U[1, 1] = 1  # |s, j=1/2, m_j=-1/2⟩ = |s↓⟩
+        # 1. Transformation: real p-orbitals → spherical harmonics
+        # Basis: [p_x↑, p_x↓, p_y↑, p_y↓, p_z↑, p_z↓] → [|1,1>↑, |1,1>↓, |1,0>↑, |1,0>↓, |1,-1>↑, |1,-1>↓]
+        U_orb = np.array([
+            [-1/np.sqrt(2), -1j/np.sqrt(2), 0],  # |1,1>
+            [ 1/np.sqrt(2), -1j/np.sqrt(2), 0],  # |1,-1>
+            [ 0,            0,             1]    # |1,0>
+        ], dtype=complex)
+        # Expand to spin space (6x6 matrix)
+        T_real2complex = np.kron(U_orb, np.eye(2))
+        # NOTE: Original order was [|1,1>, |1,-1>, |1,0>] so we swap last two blocks
+        P = np.eye(6)
+        P = P[[0, 1, 4, 5, 2, 3]]  # New order: 0,1 stay; then 4,5; then 2,3
+        T_real2complex = P @ T_real2complex
+        # =============================================
+        # Transformation: complex basis → coupled basis
+        # =============================================
+        # Basis: [|1,1>↑, |1,1>↓, |1,0>↑, |1,0>↓, |1,-1>↑, |1,-1>↓] 
+        # → [j=3/2, m_j=3/2; j=3/2, m_j=1/2; j=3/2, m_j=-1/2; j=3/2, m_j=-3/2; j=1/2, m_j=1/2; j=1/2, m_j=-1/2]
+        T_CG = np.zeros((6, 6), dtype=complex)
+        sqrt1_3 = np.sqrt(1/3)
+        sqrt2_3 = np.sqrt(2/3)
+        # j = 3/2 states
+        T_CG[0, 0] = 1                          # |3/2, 3/2⟩ = |1,1>↑
+        T_CG[1, 1] = sqrt1_3; T_CG[1, 2] = sqrt2_3  # |3/2, 1/2⟩ = √(1/3)|1,1>↓ + √(2/3)|1,0>↑
+        T_CG[2, 3] = sqrt2_3; T_CG[2, 4] = sqrt1_3  # |3/2,-1/2⟩ = √(2/3)|1,0>↓ + √(1/3)|1,-1>↑
+        T_CG[3, 5] = 1                          # |3/2,-3/2⟩ = |1,-1>↓
+        # j = 1/2 states
+        T_CG[4, 1] = sqrt2_3; T_CG[4, 2] = -sqrt1_3  # |1/2, 1/2⟩ = √(2/3)|1,1>↓ - √(1/3)|1,0>↑
+        T_CG[5, 3] = sqrt1_3; T_CG[5, 4] = -sqrt2_3  # |1/2,-1/2⟩ = √(1/3)|1,0>↓ - √(2/3)|1,-1>↑
+        T_p = T_CG @ T_real2complex
+        U[2:, 2:] = T_p
         return U
 
     @abstractmethod
@@ -99,54 +93,50 @@ class TightBinding(Notation):
 
     def sublattice_data(self, geometry:Geometry, location:str, idx:int):
         neighbour_idxs = geometry.get_neighbour_idxs(idx)
-        dr_list, dm_list = geometry.get_dr(location, idx, neighbour_idxs, type="list")
-        dr_dict, dm_dict = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
-        directional_cosines = geometry.bond_orientation(dr_list)
-        t_ij_dict = self.get_hamiltonian_submatrix(
-            geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hopping")
-        s_ij_dict = self.get_hamiltonian_submatrix(
-            geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="spin_orbit_coupling")
+        dr_list_NN, dm_list_NN = geometry.get_dr(location, idx, neighbour_idxs, type="list")
+        dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
+        directional_cosines_NN = geometry.bond_orientation(dr_list_NN)
+        next_neighbour_idxs = geometry.get_next_neighbour_idxs(idx)
+        dr_dict_NNN, dm_dict_NNN = geometry.get_dr(location, idx, next_neighbour_idxs, type="dict")
+        # Hopping
+        t_ij_dict = {}
+        for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines_NN):
+            eigenvalue_dict = self._slater_koster_hoppings(geometry, idx, neighbour_idx, cosines)
+            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+            H_coupled = self.U.conj().T @ H_uncoupled @ self.U
+            t_ij_dict[neighbour_idx] = H_coupled
+        # Spin-Orbit Coupling
+        s_ij_dict = {}
+        for next_neighbour_idx in next_neighbour_idxs:
+            eigenvalue_dict = self._spin_orbit_coupling(geometry, idx, next_neighbour_idx)
+            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+            H_coupled = self.U.conj().T @ H_uncoupled @ self.U
+            s_ij_dict[next_neighbour_idx] = H_coupled
+        # TODO: Mean Field Decoupled Interaction
+        u_ij_dict = {}
         return {
                 "idx": idx,
-                "neighbour_idxs": neighbour_idxs,
-                "dr_dict": dr_dict,
-                "dm_dict": dm_dict,
+                "NN_idxs": neighbour_idxs,
+                "dr_dict_NN": dr_dict_NN,
+                "dm_dict_NN": dm_dict_NN,
+                "NNN_idxs": next_neighbour_idxs,
+                "dr_dict_NNN": dr_dict_NNN,
+                "dm_dict_NNN": dm_dict_NNN,
                 "hopping_dict": t_ij_dict,
                 "spin_orbit_coupling_dict": s_ij_dict,
-                "interaction_dict": None
+                "interaction_dict": u_ij_dict
         }
 
-    def get_hamiltonian_submatrix(self, geometry:Geometry, idx, neighbour_idxs, directional_cosines, eigenvalue_type="hppping"):
-        label_i = geometry.get_label(idx)
-        H_i = {}
-        if eigenvalue_type == "hopping":
-            for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines):
-                j = neighbour_idx
-                label_j = geometry.get_label(j)
-                eigenvalue_dict = self._slater_koster_hoppings(label_i, label_j, cosines)
-                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
-                H_i[j] = H_coupled
-        elif eigenvalue_type == "spin_orbit_coupling":
-            i = idx
-            eigenvalue_dict = self._spin_orbit_coupling(label_i)
-            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = self.U.conj().T @ H_uncoupled @ self.U 
-            H_i[i] = H_coupled
-        else:
-            raise ValueError(f"'{eigenvalue_type}' not implemented!")  
-        return H_i    
-
-    def _slater_koster_hoppings(self, label_i, label_j, cosines):
+    def _slater_koster_hoppings(self, geometry, site_i, site_j, cosines):
+        label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"]
         t_ss = nn_parser[label_j]["t_ss_sigma"]
         t_sp = nn_parser[label_j]["t_sp_sigma"]
         t_pp_sigma = nn_parser[label_j]["t_pp_sigma"]
         t_pp_pi = nn_parser[label_j]["t_pp_pi"]
-        n_z = 0 # TODO: implement bukcling angle in json inbetween sublattices
-        l, m = (cosines[0], cosines[1]) if len(cosines) == 2 else (cosines[0], cosines[1])
-        n = cosines[2] if len(cosines) == 3 else n_z
+        l, m = (cosines[0], cosines[1])
+        n = cosines[2] if len(cosines) == 3 else 0
         p_cosines = [l, m, n]
         # Case |p_n><p_m| 
         pp_matrix = [
@@ -161,7 +151,7 @@ class TightBinding(Notation):
         eigenvalue_dict = {}
         for alpha in self.orbitals:
             for beta in self.orbitals:
-                key = f"|{alpha}><{beta}|"
+                outer_product = f"|{alpha}><{beta}|"
                 H_t = 0
                 # s-s
                 if alpha == beta == 's':
@@ -172,43 +162,68 @@ class TightBinding(Notation):
                     d = self.direction_index[p_orb.split('_')[1]]
                     #NOTE: s are symmetric, p orbitals are antisymmetric -> Under spatial inversion:
                     # s(-r) = s(r) and p(-r) = -p(r), hence <s|H|x> = -<x|H|s>
-                    t = p_cosines[d] * t_sp
-                    if key[1] != "s":
-                        t *= -1
-                    H_t += t
+                    H_t += p_cosines[d] * t_sp
+                    if outer_product[1] != "s":
+                        H_t *= -1
                 # p-p
                 elif alpha.startswith('p') and beta.startswith('p'):
                     i = self.direction_index[alpha.split('_')[1]]
                     j = self.direction_index[beta.split('_')[1]]
                     H_t += pp_matrix[i][j]
+                else: 
+                    raise ValueError(f"Not Implemented!")
                 # Spin
                 for sigma_1 in self.spin_dict.values():
                     for sigma_2 in self.spin_dict.values():
-                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
-                        eigenvalue_dict[outer_product] = H_t
+                            outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                            eigenvalue_dict[outer_product] = H_t if sigma_1 == sigma_2 else 0
         return eigenvalue_dict
 
-    def _spin_orbit_coupling(self, label_i):
+    def _spin_orbit_coupling(self, geometry:Geometry, site_i, site_j):
+        label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
-        so_parser = eigenvalue_parser.value["SO_coupling"][label_i]
-        lambda_SO = so_parser["lambda_pp"]
+        so_parser = eigenvalue_parser.value["SO_coupling"][label_j]
+        lambda_ss = so_parser["lambda_ss"]
+        lambda_sp = so_parser["lambda_sp"]
+        lambda_pp = so_parser["lambda_pp"]
+        v_ij = geometry.get_chirality(site_i, site_j)
         coupling_dict = {}
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
                         outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
-                        H_SO = 0
-                        # p-p
-                        if alpha.startswith('p') and beta.startswith('p'):
+                        H_so = 0
+                        # s-s coupling
+                        if alpha == "s" and beta == "s":
+                            # NOTE: <s|L·S|s> = 0
+                            H_so += 1j * lambda_ss if sigma_1 == sigma_2 else 0
+                        # s-p or p-s Kane coupling
+                        elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
+                            p_orb = alpha if alpha.startswith('p') else beta
+                            d = self.direction_index[p_orb.split('_')[1]]
+                            pauli_matrix = self.pauli_matrix_dict[d]
+                            H_so += (1j * lambda_sp / 3) * pauli_matrix[n, m]
+                            #NOTE: s are symmetric, p orbitals are antisymmetric -> Under spatial inversion:
+                            # s(-r) = s(r) and p(-r) = -p(r), hence <s|H|x> = -<x|H|s>
+                            if outer_product[1] != "s":
+                                H_so *= -1
+                        # p-p Chadi coupling
+                        elif alpha.startswith('p') and beta.startswith('p'):
                             i = self.direction_index[alpha.split('_')[1]]
                             j = self.direction_index[beta.split('_')[1]]
                             k = (set(self.direction_index.values()) - {i, j}).pop()
                             eps_ijk = LeviCivita(i, j, k)
                             sigma_k = self.pauli_matrix_dict[k]
-                            H_SO += 1j * lambda_SO * eps_ijk * sigma_k[n, m]
-                        coupling_dict[outer_product] = H_SO  
+                            H_so += 1j * lambda_pp * eps_ijk * sigma_k[n, m]
+                        else: 
+                            raise ValueError(f"Not Implemented!")
+                        coupling_dict[outer_product] = v_ij * H_so
         return coupling_dict
+
+    def _mean_field_interaction(self, label_i):
+        # TODO:
+        return {}
 
     def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):
         uncoupled_states = self.uncoupled_states
@@ -239,38 +254,3 @@ class TightBinding(Notation):
     @abstractmethod
     def plot_dispersion(self, geometry: Geometry):
         raise NotImplementedError("Implement dispersion plot method!")
-
-    def plot_band_structure(self, geometry: Geometry):
-        raise NotImplementedError("Implement band structure plot method!")
-        # TODO:
-        # assert(self.model_options.band_structure)
-        print("Plotting band structure...")
-        # N_k = geometry.N_k
-        # k_vec = geometry.k_path
-        # Eplus = self.E_plus_band  
-        # Eminus = self.E_minus_band 
-
-        # # Create a parametric x-axis for the k-path (Γ → K → M → Γ)
-        # k_path_length = np.arange(len(k_vec))
-        # plt.figure(figsize=(10, 6))
-        # plt.plot(k_path_length, Eplus, label='E+', color='blue')
-        # plt.plot(k_path_length, Eminus, label='E-', color='red')
-
-        # # Positions must be scalars
-        # positions = [
-        #     0, 
-        #     N_k**2, 
-        #     2 * N_k**2, 
-        #     3 * N_k**2 - 1
-        # ]
-        # plt.xticks(
-        #     positions,
-        #     ['Γ', 'K', 'M', 'Γ'],
-        #     fontsize=12
-        # )
-
-        # plt.xlabel('High-Symmetry Path')
-        # plt.ylabel('Energy (eV)')
-        # plt.legend()
-        # plt.grid(True)
-        # plt.show()
