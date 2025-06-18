@@ -91,9 +91,9 @@ class TightBinding(Notation):
         self.H = None
         raise NotImplementedError("'build_hamiltonian' method not implemented!")
 
-    def sublattice_data(self, geometry:Geometry, location:str, idx:int):
+    def _sublattice_data(self, geometry:Geometry, location:str, idx:int):
         neighbour_idxs = geometry.get_neighbour_idxs(idx)
-        dr_list_NN, dm_list_NN = geometry.get_dr(location, idx, neighbour_idxs, type="list")
+        dr_list_NN, _ = geometry.get_dr(location, idx, neighbour_idxs, type="list")
         dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
         directional_cosines_NN = geometry.bond_orientation(dr_list_NN)
         next_neighbour_idxs = geometry.get_next_neighbour_idxs(idx)
@@ -101,19 +101,31 @@ class TightBinding(Notation):
         # Hopping
         t_ij_dict = {}
         for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines_NN):
-            eigenvalue_dict = self._slater_koster_hoppings(geometry, idx, neighbour_idx, cosines)
+            eigenvalue_dict = self.slater_koster_hoppings(geometry, idx, neighbour_idx, cosines)
             H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = self.U.conj().T @ H_uncoupled @ self.U
             t_ij_dict[neighbour_idx] = H_coupled
         # Spin-Orbit Coupling
         s_ij_dict = {}
         for next_neighbour_idx in next_neighbour_idxs:
-            eigenvalue_dict = self._spin_orbit_coupling(geometry, idx, next_neighbour_idx)
+            eigenvalue_dict = self.spin_orbit_coupling(geometry, idx, next_neighbour_idx)
             H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = self.U.conj().T @ H_uncoupled @ self.U
             s_ij_dict[next_neighbour_idx] = H_coupled
         # TODO: Mean Field Decoupled Interaction
         u_ij_dict = {}
+        # Zeeman-Splitting
+        z_ij_dict = {}
+        eigenvalue_dict = self.zeeman_splitting(geometry, idx)
+        H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = self.U.conj().T @ H_uncoupled @ self.U
+        z_ij_dict[idx] = H_coupled
+        # Staggered Sublattice Potential
+        m_ij_dict = {}
+        eigenvalue_dict = self.staggered_sublattice_potential(geometry, idx)
+        H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = self.U.conj().T @ H_uncoupled @ self.U
+        m_ij_dict[idx] = H_coupled
         return {
                 "idx": idx,
                 "NN_idxs": neighbour_idxs,
@@ -124,10 +136,12 @@ class TightBinding(Notation):
                 "dm_dict_NNN": dm_dict_NNN,
                 "hopping_dict": t_ij_dict,
                 "spin_orbit_coupling_dict": s_ij_dict,
-                "interaction_dict": u_ij_dict
+                "interaction_dict": u_ij_dict,
+                "zeeman_splitting_dict": z_ij_dict,
+                "staggered_potential_dict": m_ij_dict     
         }
 
-    def _slater_koster_hoppings(self, geometry, site_i, site_j, cosines):
+    def slater_koster_hoppings(self, geometry, site_i, site_j, cosines):
         label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"]
@@ -179,7 +193,7 @@ class TightBinding(Notation):
                             eigenvalue_dict[outer_product] = H_t if sigma_1 == sigma_2 else 0
         return eigenvalue_dict
 
-    def _spin_orbit_coupling(self, geometry:Geometry, site_i, site_j):
+    def spin_orbit_coupling(self, geometry:Geometry, site_i, site_j):
         label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         so_parser = eigenvalue_parser.value["SO_coupling"][label_j]
@@ -194,16 +208,17 @@ class TightBinding(Notation):
                     for beta in self.orbitals:
                         outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
                         H_so = 0
-                        # s-s coupling
+                        # s-s Kane coupling
                         if alpha == "s" and beta == "s":
                             # NOTE: <s|L·S|s> = 0
-                            H_so += 1j * lambda_ss if sigma_1 == sigma_2 else 0
+                            pauli_matrix = self.pauli_matrix_dict[2]
+                            H_so += 1j * lambda_ss * pauli_matrix[n, m]
                         # s-p or p-s Kane coupling
                         elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
                             p_orb = alpha if alpha.startswith('p') else beta
                             d = self.direction_index[p_orb.split('_')[1]]
                             pauli_matrix = self.pauli_matrix_dict[d]
-                            H_so += (1j * lambda_sp / 3) * pauli_matrix[n, m]
+                            H_so += 1j * lambda_sp * pauli_matrix[n, m]
                             #NOTE: s are symmetric, p orbitals are antisymmetric -> Under spatial inversion:
                             # s(-r) = s(r) and p(-r) = -p(r), hence <s|H|x> = -<x|H|s>
                             if outer_product[1] != "s":
@@ -220,10 +235,47 @@ class TightBinding(Notation):
                             raise ValueError(f"Not Implemented!")
                         coupling_dict[outer_product] = v_ij * H_so
         return coupling_dict
-
-    def _mean_field_interaction(self, label_i):
+    
+    def mean_field_interaction(self, site_i):
         # TODO:
         return {}
+
+    def zeeman_splitting(self, geometry:Geometry, site_i):
+        # TODO:
+        coupling_dict = {}
+        # B_field = self.cell_parser.field["B_field"]
+        eigenvalue = 0.0001
+        for n, sigma_1 in enumerate(self.spin_dict.values()):
+            for m, sigma_2 in enumerate(self.spin_dict.values()):
+                for alpha in self.orbitals:
+                    for beta in self.orbitals:
+                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        H_z = 0
+                        if alpha == "s":
+                            pauli_matrix = self.pauli_matrix_dict[2]
+                            H_z += eigenvalue * pauli_matrix[n, m]
+                        coupling_dict[outer_product] = H_z
+        return coupling_dict
+
+    def staggered_sublattice_potential(self, geometry: Geometry, site_i):
+        coupling_dict = {}
+        label_i = geometry.get_label(site_i)
+        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+        m_parser = eigenvalue_parser.value["onsite_energy"][label_i]
+        E_s = m_parser["E_s"]
+        E_p = m_parser["E_p"]
+        for n, sigma_1 in enumerate(self.spin_dict.values()):
+            for alpha in self.orbitals:
+                outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_1}|"
+                H_z = 0
+                if alpha == "s":
+                    H_z += E_s
+                elif alpha.startswith('p'):
+                    H_z += E_p
+                else: 
+                    raise ValueError(f"Not Implemented!")
+                coupling_dict[outer_product] = H_z
+        return coupling_dict
 
     def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):
         uncoupled_states = self.uncoupled_states
@@ -232,7 +284,11 @@ class TightBinding(Notation):
         for i, (alpha, sigma_1) in enumerate(uncoupled_states):
             for j, (beta, sigma_2) in enumerate(uncoupled_states):
                 outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
-                H_uncoupled[i, j] = eigenvalue_dict[outer_product]
+                try:
+                    E_ij = eigenvalue_dict[outer_product]
+                except: 
+                    E_ij = 0
+                H_uncoupled[i, j] = E_ij
         return H_uncoupled
 
     @abstractmethod

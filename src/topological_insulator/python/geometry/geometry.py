@@ -36,6 +36,7 @@ class Geometry:
         """
         self.N_r = N_r = self.model_options.N_r
         self.N_k = self.model_options.N_k
+        self.dangling_bonds = dangling_bonds = self.model_options.dangling_bonds
 
         parser = self.cell_parser.geometry
         lattice_vectors = parser.lattice_vectors.value
@@ -43,7 +44,8 @@ class Geometry:
 
         print(f"Building Geometry...")
         self._build_lattice(N_r)
-        self._set_connectivity()
+        self._set_nn_connectivity()
+        self._set_nnn_connectivity()
         self._build_brillouine_zone()
         print(f"Geometry - Done.")
 
@@ -57,17 +59,17 @@ class Geometry:
                 for s, d in enumerate(self.delta_vectors):
                     x = (i * a1[0] + j * a2[0] + d[0])
                     y = (i * a1[1] + j * a2[1] + d[1])
-                    site = [x, y]
-                    sites.append(site)
+                    site = (x, y)
                     if i == 0 or i == N_r - 1 or j == 0 or j == N_r - 1:
                         edge_sites.append(site)
+                    sites.append(site)
                     sublattice_label.append(s)
                     site_index += 1
         self.sites, self.edge_sites = np.array(sites), np.array(edge_sites)
         self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
         self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
 
-    def _set_connectivity(self, tol=1e-12) -> None:
+    def _set_nn_connectivity(self, tol=1e-12) -> None:
         """
         Sets the connectivity matrix based on whether the distance between two sites
         is within 'reference_dist'.
@@ -95,7 +97,37 @@ class Geometry:
                 if abs(dist - a) < tol:
                     C[i, j] = 1
                     C[j, i] = 1 # h.c.
-        self.connectivity_matrix = C
+        self.nn_connectivity_matrix = C
+        # Build nn_list: list of nearest neighbors for each site
+        nn_list = [[] for _ in range(N)]
+        for i in range(N):
+            for j in range(N):
+                if C[i, j] == 1:
+                    nn_list[i].append(j)
+        self.nn_list = nn_list
+    
+    def _set_nnn_connectivity(self) -> None:
+        """
+        Sets the NNN connectivity matrix based on NN connectivity.
+        Two sites are NNN if they share a common NN neighbor.
+        """
+        N = len(self.sites)
+        C = np.zeros((N, N), dtype=int)
+        nn_list = self.nn_list
+        for i in range(N):
+            neighbors_of_i = set(nn_list[i])
+            nnn_candidates = set()
+            for j in nn_list[i]:
+                for k in nn_list[j]:
+                    if k == i:
+                        continue
+                    if k not in neighbors_of_i: # Exclude direct neighbors
+                        nnn_candidates.add(k)
+            # Set symmetric connections
+            for k in nnn_candidates:
+                C[i, k] = 1
+                C[k, i] = 1
+        self.nnn_connectivity_matrix = C
 
     def get_label(self, idx):
         return self.sublattice_labels[self.sublattice_label_idxs[idx]]
@@ -170,20 +202,15 @@ class Geometry:
         assert(len(unit_cell) == self.n_sublattices)
         return unit_cell
 
-    def get_neighbour_idxs(self, idx):
-        C = self.connectivity_matrix
-        neighbours_idx = np.where(C[idx, :] == 1)[0]
+    def get_neighbour_idxs(self, site_idx):
+        C = self.nn_connectivity_matrix
+        neighbours_idx = np.where(C[site_idx, :] == 1)[0]
         return neighbours_idx
 
-    def get_next_neighbour_idxs(self, site_idx, atol=1e-8):
-        """Find all sites at |a1| distance from the given site."""
-        base_pos = self.sites[site_idx]
-        target_d2 = np.dot(self.a1, self.a1)
-        diffs = self.sites - base_pos
-        d2 = np.einsum('ij,ij->i', diffs, diffs)
-        mask = np.isclose(d2, target_d2, atol=atol)
-        mask[site_idx] = False
-        return np.nonzero(mask)[0].tolist()
+    def get_next_neighbour_idxs(self, site_idx):
+        C = self.nnn_connectivity_matrix
+        next_neighbours_idx = np.where(C[site_idx, :] == 1)[0]
+        return next_neighbours_idx
 
     def get_chirality(self, site_i, site_j):
         neighbours_i = self.get_neighbour_idxs(site_i)
@@ -216,13 +243,13 @@ class Geometry:
             return dr_list, dm_list
 
     def bond_orientation(self, dr_list):
-        cos_theta_list = []
+        cosines_list = []
         for dr in dr_list:
             bond_length = np.linalg.norm(dr)
             assert(bond_length != 0)
-            cos_theta = dr / bond_length
-            cos_theta_list.append(cos_theta)
-        return np.array(cos_theta_list)
+            cosines = dr / bond_length
+            cosines_list.append(cosines)
+        return np.array(cosines_list)
 
     def get_edge_path(self, sublattices: list):
         sites = self.sites
@@ -247,29 +274,18 @@ class Geometry:
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         phase_dict = {}
-        if self.n_sublattices >= 3:
-            for idx_j, m_ij in dm_dict.items():
-                if idx_j in non_unit_cell_idxs:
-                    idx_j_phase = idx_j
-                    idx_j = self._find_phase(idx_j_phase, m_ij)
-                    phase_dict[idx_j] = idx_j_phase
-                elif idx_j in unit_cell_idxs:
-                    if idx_j in phase_dict.keys():
-                        # skip idx that has established phase
-                        continue
-                    phase_dict[idx_j] = None
-                else:
-                    raise ValueError(f"'{idx_j}' not in dm_dict")
-        elif self.n_sublattices == 2:
-            for idx_j in unit_cell_idxs:
-                m_ij = dm_dict[idx_j]
-                idx_j_phase = self._find_phase(idx_j, m_ij)
-                if idx_j_phase not in dm_dict.keys():
-                    phase_dict[idx_j] = None
-                else:
-                    phase_dict[idx_j] = idx_j_phase
-        else:
-            raise NotImplementedError("Not Implemented!")
+        for idx_j, m_ij in dm_dict.items():
+            if idx_j in non_unit_cell_idxs:
+                idx_j_phase = idx_j
+                idx_j = self._find_phase(idx_j_phase, m_ij)
+                phase_dict[idx_j] = idx_j_phase
+            elif idx_j in unit_cell_idxs:
+                if idx_j in phase_dict.keys():
+                    # skip idx that has established phase
+                    continue
+                phase_dict[idx_j] = None
+            else:
+                raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
     
     def _find_phase(self, idx_j, m_ij):
@@ -287,19 +303,21 @@ class Geometry:
         """
         Plots the 2D geometry of the lattice:
         - Sites as colored dots (each color = one sublattice).
-        - Bonds/edges where connectivity_matrix[i,j] == 1.
+        - Bonds/edges where NN connectivity_matrix[i,j] == 1.
 
         Parameters
         ----------
         ax : matplotlib.axes._axes.Axes, optional
             If provided, the function will draw on this Axes.
             Otherwise, it will create a new figure and Axes.
+        sites_of_interest: allows user to highlight sites using 
+            the idxs corresponding indexes
         """
         if self.n_dim != 2:
             raise ValueError("plot_geometry is designed for 2D lattices (n_dim=2).")
-        sites = self.sites                         # shape (N, 2)
-        sublat_full = self.sublattice_label_idxs   # shape (N,)
-        C = self.connectivity_matrix               # shape (N, N)
+        sites = self.sites
+        sublat_full = self.sublattice_label_idxs
+        C = self.nn_connectivity_matrix
         N = len(sites)
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
@@ -328,14 +346,11 @@ class Geometry:
         if sites_of_interest is not None:
             sites_of_interest = np.asarray(sites_of_interest)
             if sites_of_interest.size > 0:
-                # Validate indices
                 if (sites_of_interest.dtype.kind not in ('i', 'u') or 
                     np.any(sites_of_interest < 0) or 
                     np.any(sites_of_interest >= N)):
                     raise ValueError("All elements in sites_of_interest must be integers within [0, N-1].")
-                # Extract coordinates
                 highlight_coords = sites[sites_of_interest]
-                # Plot with red color and larger size
                 ax.scatter(
                     highlight_coords[:, 0], highlight_coords[:, 1],
                     color='black', s=40, edgecolors='black', linewidths=0.8,

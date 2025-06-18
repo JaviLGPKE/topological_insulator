@@ -36,37 +36,40 @@ class WaveFunction(Notation):
         return zak_phase
 
     def get_chern_invariant(self, band: int = 0, tol=1e-6):
-        """
-        Compute the Chern invariant for a single band using
-        the Fukui-Hatsugai-Suzuki discretization on a N_x, N_y k-grid.
-        """
         assert self.model_options.location in ["both", "bulk"]
         geom = self.geometry
         N_k = geom.N_k
         kx = geom.kx_bulk
         ky = geom.ky_bulk
         U_k = self.tight_binding.U_k_dict
-
+        # Gauge fixing at each k-point
+        for i in range(N_k):
+            for j in range(N_k):
+                u0 = U_k[f"[{kx[0]},{ky[0]}]"][:, band]
+                u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
+                phase_ref = np.angle(u0[0])
+                phase_curr = np.angle(u[0])
+                U_k[f"[{kx[i]},{ky[j]}]"][:, band] = u * np.exp(1j * (phase_ref - phase_curr))
+        # Berry Curvature
+        F_dict = {}
         F = np.zeros((N_k, N_k), dtype=float)
         for i in range(N_k):
-            ip = (i + 1) % N_k # periodic BC k_x wrap-around
+            ip = (i + 1) % N_k  # periodic BC
             for j in range(N_k):
-                jp = (j + 1) % N_k # periodic BC k_y wrap-around
+                jp = (j + 1) % N_k  # periodic BC
                 u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
                 u_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, band]
                 u_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, band]
                 u_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, band]
-                # Links: U_n(1) = ⟨u|u_+dn⟩/|⟨u|u+dn⟩|
-                U1 = self._phase(np.vdot(u,   u_x), tol)
+                U1 = self._phase(np.vdot(u, u_x), tol)
                 U2 = self._phase(np.vdot(u_x, u_xy), tol)
-                U3 = self._phase(np.vdot(u_xy,u_y), tol)
-                U4 = self._phase(np.vdot(u_y,   u), tol)
-                # Berry flux: F = Arg( U1 * U2 * U3 * U4 )
+                U3 = self._phase(np.vdot(u_xy, u_y), tol)
+                U4 = self._phase(np.vdot(u_y, u), tol)
+                F_dict[f"{i}, {j}"] = [U1, U2, U3, U4]
                 F[i, j] = np.angle(U1 * U2 * U3 * U4)
         C = F.sum() / (2 * np.pi)
-        return np.round(C), F
-
-    
+        return C, F, F_dict
+        
     def _phase(self, S, tol):
         norm = np.abs(S)
         return (S / norm) if norm > tol else (1 + 0j)
