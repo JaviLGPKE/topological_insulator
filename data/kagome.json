@@ -5,7 +5,7 @@
   },
   "eigenvalues":{
         "A":{"value":{
-            "onsite_energy": {"E_s":0, "E_p":0},
+            "onsite_energy": {"A":{"E_s":0, "E_p":0}},
             "nn_hopping":{
               "B":{"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
               "C":{"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
@@ -16,7 +16,7 @@
             }, "unit":"eV"
         },
         "B": {"value":{
-            "onsite_energy":{"E_s":0, "E_p":0},
+            "onsite_energy":{"B":{"E_s":0, "E_p":0}},
             "nn_hopping":{
               "A": {"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
               "C":{"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
@@ -24,10 +24,10 @@
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}}
-            }
+            }, "unit":"eV"
         },
         "C": {"value":{
-            "onsite_energy":{"E_s":0, "E_p":0},
+            "onsite_energy":{"C":{"E_s":0, "E_p":0}},
             "nn_hopping":{
               "A": {"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
               "B":{"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
@@ -35,7 +35,7 @@
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}}
-            }
+            }, "unit":"eV"
         }
     },
   "geometry": {

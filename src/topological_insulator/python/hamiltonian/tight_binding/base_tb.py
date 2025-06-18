@@ -244,7 +244,7 @@ class TightBinding(Notation):
         # TODO:
         coupling_dict = {}
         # B_field = self.cell_parser.field["B_field"]
-        eigenvalue = 0.0001
+        eigenvalue = 0.
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
