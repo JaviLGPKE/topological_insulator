@@ -58,8 +58,7 @@ class Problem:
         location = self.model_options.location
         assert(location in ["both", "bulk"])
         wavefunction: WaveFunction = self.hamiltonian["bulk"]["wavefunction"]
-        C, F, F_dict = wavefunction.get_chern_invariant(band, tol)
-        return C, F, F_dict
+        return wavefunction.get_chern_invariant(band, tol)
 
     def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, F=None):
         if plot_type == "lattice":

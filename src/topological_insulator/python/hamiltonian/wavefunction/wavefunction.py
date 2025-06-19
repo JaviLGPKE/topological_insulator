@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from itertools import product
 
 from ..notation import Notation
 from ...model_options import ModelOptions
@@ -35,38 +36,85 @@ class WaveFunction(Notation):
         print(f"Zak Phase - Done!")
         return zak_phase
 
-    def get_chern_invariant(self, band: int = 0, tol=1e-6):
+    def get_chern_invariant(self, band = None, tol=1e-6):
+        # return self._non_abelian_chern_invariant()
         assert self.model_options.location in ["both", "bulk"]
+        abelian = True
+        if np.isclose(self.cell_parser.field.magnetic.value, 0, rtol=tol):
+            abelian = False
+        if abelian: 
+            return self._abelian_chern_invariant(band, tol)
+        else:
+            return self._non_abelian_chern_invariant(band)
+
+    def _non_abelian_chern_invariant(self, bands):
+        geom = self.geometry
+        N_k, kx, ky = geom.N_k, geom.kx_bulk, geom.ky_bulk
+        U_k = self.tight_binding.U_k_dict
+        if bands == None:
+            M = self.tight_binding.n_projections * len(self.tight_binding.sublattice_idxs)
+            bands = [i for i in range(M)]
+        F = np.zeros((N_k, N_k), dtype=complex)
+        for i in range(N_k):
+            for j in range(N_k):
+                ip = (i + 1) % N_k
+                jp = (j + 1) % N_k
+                U = U_k[f"[{kx[i]},{ky[j]}]"][:, bands]
+                U_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, bands]
+                U_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, bands]
+                U_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, bands]
+                M1 = U.conj().T @ U_x
+                M2 = U_x.conj().T @ U_xy
+                M3 = U_y.conj().T @ U_xy
+                M4 = U.conj().T @ U_y
+                W = M1 @ M2 @ np.linalg.pinv(M3) @ np.linalg.pinv(M4)
+                s = np.linalg.svd(W, compute_uv=False)
+                F[i, j] = np.prod(s)
+        C = np.angle(F).sum() / (2 * np.pi)
+        return C, F, None
+
+    def _abelian_chern_invariant(self, band, tol):
+        """
+        Fukui-Hatsugai Abelian Chern invariant
+
+        bands : list of int
+            Indices of the occupied bands (length M).
+        tol : float
+            Phase-unwrapping tolerance
+
+        Returns
+        -------
+        C : float
+            The total integer Chern number
+        F : array, shape (N_k, N_k)
+            The discretized Berry flux
+        F_dict : dict
+            The four raw link determinants at each plaquette, for debugging
+        """
         geom = self.geometry
         N_k = geom.N_k
         kx = geom.kx_bulk
         ky = geom.ky_bulk
         U_k = self.tight_binding.U_k_dict
-        # Gauge fixing at each k-point
-        for i in range(N_k):
-            for j in range(N_k):
-                u0 = U_k[f"[{kx[0]},{ky[0]}]"][:, band]
-                u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
-                phase_ref = np.angle(u0[0])
-                phase_curr = np.angle(u[0])
-                U_k[f"[{kx[i]},{ky[j]}]"][:, band] = u * np.exp(1j * (phase_ref - phase_curr))
         # Berry Curvature
+        if band == None:
+            band = 0
         F_dict = {}
         F = np.zeros((N_k, N_k), dtype=float)
         for i in range(N_k):
-            ip = (i + 1) % N_k  # periodic BC
+            ip = (i + 1) % N_k # periodic BC
             for j in range(N_k):
-                jp = (j + 1) % N_k  # periodic BC
+                jp = (j + 1) % N_k # periodic BC
                 u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
                 u_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, band]
                 u_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, band]
                 u_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, band]
-                U1 = self._phase(np.vdot(u, u_x), tol)
-                U2 = self._phase(np.vdot(u_x, u_xy), tol)
-                U3 = self._phase(np.vdot(u_xy, u_y), tol)
-                U4 = self._phase(np.vdot(u_y, u), tol)
-                F_dict[f"{i}, {j}"] = [U1, U2, U3, U4]
-                F[i, j] = np.angle(U1 * U2 * U3 * U4)
+                U_1 = self._phase(np.vdot(u, u_x), tol)
+                U_2 = self._phase(np.vdot(u_x, u_xy), tol)
+                U_3 = self._phase(np.vdot(u_xy, u_y), tol)
+                U_4 = self._phase(np.vdot(u_y, u), tol)
+                F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4]
+                F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
         return C, F, F_dict
         
@@ -88,5 +136,4 @@ class WaveFunction(Notation):
         ax.set_xlabel(r'$k_x$')
         ax.set_ylabel(r'$k_y$')
         ax.set_zlabel(r'$F$')
-        plt.tight_layout()
         plt.show()

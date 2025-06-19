@@ -21,6 +21,8 @@ class TightBinding(Notation):
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
+        # Parameters
+        self.u_B = (6.63e-34)/(4 * np.pi * 9.11e-31)
         # Sublattice
         self.sublattice_data_dict = {}
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
@@ -241,10 +243,10 @@ class TightBinding(Notation):
         return {}
 
     def zeeman_splitting(self, geometry:Geometry, site_i):
-        # TODO:
+        # TODO: coupling between spin and orbital
         coupling_dict = {}
-        # B_field = self.cell_parser.field["B_field"]
-        eigenvalue = 0.
+        B = self.cell_parser.field.magnetic.value
+        u_B = self.u_B
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
@@ -253,7 +255,7 @@ class TightBinding(Notation):
                         H_z = 0
                         if alpha == "s":
                             pauli_matrix = self.pauli_matrix_dict[2]
-                            H_z += eigenvalue * pauli_matrix[n, m]
+                            H_z += 1/2 * u_B  * B * pauli_matrix[n, m]
                         coupling_dict[outer_product] = H_z
         return coupling_dict
 

@@ -3,6 +3,10 @@
     "name": { "value": "Kagome" },
     "dimensions": { "value": 2 }
   },
+  "field":{
+    "magnetic":{"value": 0, "unit":"T"},
+    "electric":{"value": 0, "unit": "V/m"}
+},
   "eigenvalues":{
         "A":{"value":{
             "onsite_energy": {"A":{"E_s":0, "E_p":0}},

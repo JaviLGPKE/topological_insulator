@@ -198,5 +198,4 @@ class TightBindingBulk(TightBinding):
         ax.set_xlabel("k-path", fontsize=12)
         ax.set_ylabel("E/eV", fontsize=12)
         ax.grid(True, ls="--", lw=0.5)
-        plt.tight_layout()
         plt.show()

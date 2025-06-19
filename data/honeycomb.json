@@ -4,8 +4,8 @@
         "dimensions": {"value": 2}
     },
     "field":{
-        "B_field":{"value": 0, "unit":"T"},
-        "E_field":{"value": 0, "unit": "V/m"}
+        "magnetic":{"value": 0, "unit":"T"},
+        "electric":{"value": 0, "unit": "V/m"}
     },
     "eigenvalues":{
         "A":{"value":{
