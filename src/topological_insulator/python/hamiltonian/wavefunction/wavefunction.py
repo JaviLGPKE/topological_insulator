@@ -37,7 +37,7 @@ class WaveFunction(Notation):
         return zak_phase
 
     def get_chern_invariant(self, band = None, tol=1e-6):
-        # return self._non_abelian_chern_invariant()
+        # return self._non_abelian_chern_invariant(band)
         assert self.model_options.location in ["both", "bulk"]
         abelian = True
         if np.isclose(self.cell_parser.field.magnetic.value, 0, rtol=tol):
@@ -48,37 +48,26 @@ class WaveFunction(Notation):
             return self._non_abelian_chern_invariant(band)
 
     def _non_abelian_chern_invariant(self, bands):
+        # TODO:
         geom = self.geometry
         N_k, kx, ky = geom.N_k, geom.kx_bulk, geom.ky_bulk
         U_k = self.tight_binding.U_k_dict
         if bands == None:
             M = self.tight_binding.n_projections * len(self.tight_binding.sublattice_idxs)
             bands = [i for i in range(M)]
-        F = np.zeros((N_k, N_k), dtype=complex)
+        Q = np.zeros((N_k, N_k), dtype=complex)
         for i in range(N_k):
+            ip = (i + 1) % N_k
             for j in range(N_k):
-                ip = (i + 1) % N_k
                 jp = (j + 1) % N_k
-                U = U_k[f"[{kx[i]},{ky[j]}]"][:, bands]
-                U_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, bands]
-                U_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, bands]
-                U_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, bands]
-                M1 = U.conj().T @ U_x
-                M2 = U_x.conj().T @ U_xy
-                M3 = U_y.conj().T @ U_xy
-                M4 = U.conj().T @ U_y
-                W = M1 @ M2 @ np.linalg.pinv(M3) @ np.linalg.pinv(M4)
-                s = np.linalg.svd(W, compute_uv=False)
-                F[i, j] = np.prod(s)
-        C = np.angle(F).sum() / (2 * np.pi)
-        return C, F, None
+        return None
 
     def _abelian_chern_invariant(self, band, tol):
         """
         Fukui-Hatsugai Abelian Chern invariant
 
-        bands : list of int
-            Indices of the occupied bands (length M).
+        bands : int
+            Band to be considered
         tol : float
             Phase-unwrapping tolerance
 
@@ -89,7 +78,7 @@ class WaveFunction(Notation):
         F : array, shape (N_k, N_k)
             The discretized Berry flux
         F_dict : dict
-            The four raw link determinants at each plaquette, for debugging
+            The four raw link determinants at each plaquette (debugging) 
         """
         geom = self.geometry
         N_k = geom.N_k
@@ -126,7 +115,7 @@ class WaveFunction(Notation):
         g = self.geometry
         k_x, k_y = g.kx_bulk, g.ky_bulk
         KX_full, KY_full = np.meshgrid(k_x, k_y, indexing='ij')
-        fig = plt.figure(figsize=(6,6))
+        fig = plt.figure(figsize=(7,7))
         ax  = fig.add_subplot(111, projection='3d')
         surf = ax.plot_surface(
             KX_full, KY_full, F, 

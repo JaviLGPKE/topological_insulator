@@ -237,7 +237,7 @@ class TightBinding(Notation):
                             raise ValueError(f"Not Implemented!")
                         coupling_dict[outer_product] = v_ij * H_so
         return coupling_dict
-    
+
     def mean_field_interaction(self, site_i):
         # TODO:
         return {}
