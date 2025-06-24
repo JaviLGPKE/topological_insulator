@@ -44,6 +44,9 @@ class TightBindingBulk(TightBinding):
                     key = f"[{k_x},{k_y}]"
                     k = np.array([k_x, k_y])
                     H_k = self._fourier_transform(geometry, k)
+                    # O_sublattice = np.array([[0, 1], [1, 0]])
+                    # O = np.kron(O_sublattice, self.O)
+                    # embed()
                     E_k, U_k = self._solve_eigenvalues(H_k)
                     E_k_dict[key] = E_k # Eigenvalues
                     U_k_dict[key] = U_k # Eigenstates
@@ -62,14 +65,14 @@ class TightBindingBulk(TightBinding):
             sublattice_i_label = geometry.label_mapper[i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             data = self.sublattice_data_dict[sublattice_i_label]
-            sublattice_dict = self.get_sublattice_dict(geometry, N_sites, data, k)
+            sublattice_dict = self.get_sublattice_dict(geometry, data, k, N_sites)
             for j in range(N_sites):
                 sublattice_j_label = geometry.label_mapper[j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
                 H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
         return H_k
 
-    def get_sublattice_dict(self, geometry, N_sites, data, k):
+    def get_sublattice_dict(self, geometry, data, k, N_sites):
         sublattice_dict = {geometry.label_mapper[n]: {"H_k_ij": 0} for n in range(N_sites)}
         idx_i = data["idx"]
         idx_i_label = geometry.get_label(idx_i)

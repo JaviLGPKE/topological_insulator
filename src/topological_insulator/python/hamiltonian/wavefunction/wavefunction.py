@@ -19,6 +19,16 @@ class WaveFunction(Notation):
         self.cell_parser = cell_parser
         self.geometry = geometry
         self.tight_binding = tight_binding
+        # Parity
+        self.O = self._time_reversal_operator()
+    
+    def _time_reversal_operator(self):
+        tb = self.tight_binding
+        N_sites = len(tb.sublattice_idxs)
+        O_coupled = tb.O
+        O_sublattice = np.array([[1, 0], [0, 1]]) #tb.pauli_matrix_dict[tb.direction_index["x"]]
+        O = np.kron(O_sublattice, O_coupled)
+        return O
 
     def get_zak_phase(self, band = 1):
         assert(self.model_options.location in ["both", "edge"])
@@ -36,50 +46,41 @@ class WaveFunction(Notation):
         print(f"Zak Phase - Done!")
         return zak_phase
 
-    def get_chern_invariant(self, band = None, tol=1e-6):
-        # return self._non_abelian_chern_invariant(band)
+    def get_topological_invariant(self, band=None, tol=1e-6):
         assert self.model_options.location in ["both", "bulk"]
-        abelian = True
-        if np.isclose(self.cell_parser.field.magnetic.value, 0, rtol=tol):
-            abelian = False
-        if abelian: 
-            return self._abelian_chern_invariant(band, tol)
+        if not np.isclose(self.cell_parser.field.magnetic.value, 0, rtol=tol):
+            return self.abelian_chern_invariant(band, tol)
         else:
-            return self._non_abelian_chern_invariant(band)
+            return self.Z2_invariant()
 
-    def _non_abelian_chern_invariant(self, bands):
-        # TODO:
-        geom = self.geometry
-        N_k, kx, ky = geom.N_k, geom.kx_bulk, geom.ky_bulk
+    def Z2_invariant(self):
+        """
+        Computes Z2 topological invariant using Time-Reversal eigenvalues at TRIM points.
+        """
+        g, tb = self.geometry, self.tight_binding 
+        O = self.O
         U_k = self.tight_binding.U_k_dict
-        if bands == None:
-            M = self.tight_binding.n_projections * len(self.tight_binding.sublattice_idxs)
-            bands = [i for i in range(M)]
-        Q = np.zeros((N_k, N_k), dtype=complex)
-        for i in range(N_k):
-            ip = (i + 1) % N_k
-            for j in range(N_k):
-                jp = (j + 1) % N_k
-        return None
+        kx, ky = g.kx_bulk, g.ky_bulk
+        b1, b2 = g.b1, g.b2
+        Gammas = [np.array([0, 0]), 1/2 * b1, 1/2 * b2, 1/2 * (b1 + b2)] # FIXME: Trim points
+        N_bands = tb.n_projections * len(tb.sublattice_idxs)
+        deltas = []
+        for k in Gammas:
+            i = np.argmin(np.abs(kx - k[0]))
+            j = np.argmin(np.abs(ky - k[1]))
+            u_k = U_k[f"[{kx[i]},{ky[j]}]"]
+            delta_i = 1
+            for n in range(0, N_bands, 2):  # Kramers pairs
+                u_k_n = np.column_stack((u_k[:, n], u_k[:, n+1]))
+                P_n = u_k_n.conj().T @ O @ u_k_n
+                xi_n, _ = np.linalg.eigh(P_n)
+                delta_i *= np.prod(xi_n.real)
+            deltas.append(delta_i)
+        total_product = np.prod(deltas)
+        Z_2 = int((1 - total_product) // 2)  # maps +1 to 0, −1 to 1
+        return Z_2
 
-    def _abelian_chern_invariant(self, band, tol):
-        """
-        Fukui-Hatsugai Abelian Chern invariant
-
-        bands : int
-            Band to be considered
-        tol : float
-            Phase-unwrapping tolerance
-
-        Returns
-        -------
-        C : float
-            The total integer Chern number
-        F : array, shape (N_k, N_k)
-            The discretized Berry flux
-        F_dict : dict
-            The four raw link determinants at each plaquette (debugging) 
-        """
+    def abelian_chern_invariant(self, band, tol):
         geom = self.geometry
         N_k = geom.N_k
         kx = geom.kx_bulk
@@ -88,8 +89,7 @@ class WaveFunction(Notation):
         # Berry Curvature
         if band == None:
             band = 0
-        F_dict = {}
-        F = np.zeros((N_k, N_k), dtype=float)
+        F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
         for i in range(N_k):
             ip = (i + 1) % N_k # periodic BC
             for j in range(N_k):
@@ -105,7 +105,7 @@ class WaveFunction(Notation):
                 F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4]
                 F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
-        return C, F, F_dict
+        return C, F#, F_dict
         
     def _phase(self, S, tol):
         norm = np.abs(S)
