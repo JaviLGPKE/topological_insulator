@@ -38,18 +38,17 @@ class TightBindingBulk(TightBinding):
             tol = 1e-12 * geometry.lattice_constant
             self.H_diag = np.where(np.abs(H_diag) < tol, 0, H_diag)
         elif H_type in ["momentum", "reciprocal"]:
-            E_k_dict, U_k_dict = {}, {}
+            H_k_dict, E_k_dict, U_k_dict = {}, {}, {}
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
                     key = f"[{k_x},{k_y}]"
                     k = np.array([k_x, k_y])
                     H_k = self._fourier_transform(geometry, k)
-                    # O_sublattice = np.array([[0, 1], [1, 0]])
-                    # O = np.kron(O_sublattice, self.O)
-                    # embed()
                     E_k, U_k = self._solve_eigenvalues(H_k)
+                    H_k_dict[key] = H_k # Hamiltonian
                     E_k_dict[key] = E_k # Eigenvalues
                     U_k_dict[key] = U_k # Eigenstates
+            self.H_k_dict = H_k_dict
             self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
         else:
             ValueError("Only 'real' and 'reciprocal'/'momentum' problems considered")

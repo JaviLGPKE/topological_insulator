@@ -96,7 +96,9 @@ class TightBinding(Notation):
         O_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         U = self.U
         O_coupled = U.conj().T @ O_uncoupled @ U
-        return O_coupled
+        O_sublattice = np.identity(n=len(self.delta_vectors))
+        O = np.kron(O_sublattice, O_coupled)
+        return O
 
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:
@@ -318,6 +320,7 @@ class TightBinding(Notation):
         if H_type == "real_space":
             self.E = None
         elif H_type == "reciprocal_space":
+            self.H_k_dict = None
             self.E_k_dict, self.U_k_dict = None, None
         raise NotImplementedError("'solve_eigenvalues' method not implemented")
 

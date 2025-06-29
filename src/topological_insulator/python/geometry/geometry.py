@@ -138,8 +138,9 @@ class Geometry:
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
         A = a1[0]*a2[1] - a1[1]*a2[0]
-        self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
-        self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
+        b1 = self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
+        b2 = self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
+        trims = self.trims = [np.array([0.0, 0.0]), 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
         # Bulk
         if self.model_options.BZ == "reduced":
             discretization = np.linspace(-np.pi/a, np.pi/a, N_k)
@@ -147,7 +148,11 @@ class Geometry:
             discretization = np.linspace(-factor*np.pi/a, factor*np.pi/a, N_k)
         else:
             raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
-        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk = (discretization, discretization)
+        trim_kx = [t[0] for t in trims]
+        trim_ky = [t[1] for t in trims]
+        kx_bulk = np.unique( np.concatenate([discretization, trim_kx]) )
+        ky_bulk = np.unique( np.concatenate([discretization, trim_ky]) )
+        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
         # Edge
         if self.model_options.location in ["edge", "both"]:
