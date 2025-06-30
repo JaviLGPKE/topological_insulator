@@ -275,7 +275,7 @@ class Geometry:
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
 
-    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
+    def _get_phase_idxs_NN(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         phase_dict = {}
@@ -291,6 +291,12 @@ class Geometry:
                 phase_dict[idx_j] = None
             else:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
+        return phase_dict
+    
+    def _get_phase_idxs_NNN(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
+        phase_dict = {}
+        unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
+        non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         return phase_dict
     
     def _find_phase(self, idx_j, m_ij):

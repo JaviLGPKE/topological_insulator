@@ -97,7 +97,7 @@ class TightBinding(Notation):
         U = self.U
         O_coupled = U.conj().T @ O_uncoupled @ U
         O_sublattice = np.identity(n=len(self.delta_vectors))
-        O = np.kron(O_sublattice, O_coupled)
+        O = np.kron(O_sublattice, O_uncoupled)
         return O
 
     @abstractmethod

@@ -130,34 +130,46 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
             # Hoppings
-            phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
-            for idx_j, idx_j_phase in phase_dict.items():
-                j = idx_map[idx_j]
-                col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                # Physical
-                neighbour_idxs = site_dict_i["NN_idxs"]
-                if idx_j in neighbour_idxs:
-                    m_ij = site_dict_i["dm_dict_NN"][idx_j]
-                    t_ij = site_dict_i["hopping_dict"][idx_j].copy()
-                else:
-                    m_ij = site_dict_i["dm_dict_NNN"][idx_j]
-                    dr = site_dict_i["dr_dict_NNN"][idx_j]
-                    bond_length = np.linalg.norm(dr)
-                    cosines = dr / bond_length
-                    eigenvalue_dict = self._slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
-                    H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                    t_ij = self.U.conj().T @ H_uncoupled @ self.U
-                bloch_phase = np.exp(1j * k * m_ij)
-                H_k_ij = bloch_phase * t_ij
-                # Phase
-                if idx_j_phase is not None:
-                    m_ij_phase = site_dict_i["dm_dict_NN"][idx_j_phase]
-                    t_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
-                    bloch_phase =  np.exp(1j * k * m_ij_phase)
-                    H_k_ij += bloch_phase * t_ij_phase
-                H_k[row_slice, col_slice] = H_k_ij
+            self._hoppings_ft(
+                geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            )
             # TODO: Spin-Orbit Coupling
+            self._spin_orbit_coupling_ft(
+                geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            )
         return H_k
+    
+    def _hoppings_ft(self, geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
+        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
+        for idx_j, idx_j_phase in phase_dict.items():
+            j = idx_map[idx_j]
+            col_slice = slice(j * N_projections, (j + 1) * N_projections)
+            # Physical
+            neighbour_idxs = site_dict_i["NN_idxs"]
+            if idx_j in neighbour_idxs:
+                m_ij = site_dict_i["dm_dict_NN"][idx_j]
+                t_ij = site_dict_i["hopping_dict"][idx_j].copy()
+            else:
+                m_ij = site_dict_i["dm_dict_NNN"][idx_j]
+                dr = site_dict_i["dr_dict_NNN"][idx_j]
+                bond_length = np.linalg.norm(dr)
+                cosines = dr / bond_length
+                eigenvalue_dict = self._slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
+                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+                t_ij = self.U.conj().T @ H_uncoupled @ self.U
+            bloch_phase = np.exp(1j * k * m_ij)
+            H_k_ij = bloch_phase * t_ij
+            # Phase
+            if idx_j_phase is not None:
+                m_ij_phase = site_dict_i["dm_dict_NN"][idx_j_phase]
+                t_ij_phase = site_dict_i["hopping_dict"][idx_j_phase].copy()
+                bloch_phase =  np.exp(1j * k * m_ij_phase)
+                H_k_ij += bloch_phase * t_ij_phase
+            H_k[row_slice, col_slice] = H_k_ij
+    
+    def _spin_orbit_coupling_ft(self, geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
+        phase_dict = geometry._get_phase_idxs_NNN(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
+        # TODO:
 
     def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])

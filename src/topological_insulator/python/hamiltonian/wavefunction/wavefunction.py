@@ -48,64 +48,24 @@ class WaveFunction(Notation):
     def Z2_invariant(self):
         g, tb = self.geometry, self.tight_binding
         O = tb.O # Time-Reversal Operator
-        H_k, U_k = tb.H_k_dict, tb.U_k_dict
+        U_k = tb.U_k_dict
         kx, ky = g.kx_bulk, g.ky_bulk
         trims = g.trims
-        Ntot = tb.n_projections * len(tb.sublattice_idxs)
-        Nocc = Ntot // 2
+        # N_tot = tb.n_projections * len(tb.sublattice_idxs)
         deltas = []
         for k in trims:
             i = np.argmin(np.abs(g.kx_bulk - k[0]))
             j = np.argmin(np.abs(g.ky_bulk - k[1]))
             key = f"[{kx[i]},{ky[j]}]"
-            # h_k = H_k[key]
-            u_k = U_k[key][:, :Nocc]
+            u_k = U_k[key]
             w_k = u_k.conj().T @ O @ u_k.conj()
             w_k_det = np.linalg.det(w_k)
-            # FIXME: check gauge invariance of w_k = -w_k.T
-            embed()
             P_k = pf.pfaffian(w_k, method='P')
-            delta_i = np.sqrt(w_k_det)/P_k
-            if np.abs(P_k) < 1e-12:
-                # Odd Subspace
-                delta_i = 0
-                return "stoopid"
-            else:
-                # Even Subspace
-                delta_i = np.sqrt(w_k_det) / P_k
-            deltas.append(np.sign(delta_i))
+            delta_i = np.sqrt(w_k_det) / P_k
+            deltas.append(np.sign(delta_i.real))
         total_product = np.prod(deltas)
         Z_2 = int((1 - total_product) // 2)  # maps +1 to 0, −1 to 1
         return Z_2
-
-    # def Z2_invariant(self):
-    #     """
-    #     Computes Z2 topological invariant using Time-Reversal eigenvalues at TRIM points.
-    #     """
-    #     g, tb = self.geometry, self.tight_binding 
-    #     O = tb.O
-    #     H_k, U_k = tb.H_k_dict, tb.U_k_dict
-    #     kx, ky = g.kx_bulk, g.ky_bulk
-    #     b1, b2 = g.b1, g.b2
-    #     trims = [np.array([0, 0]), 1/2 * b1, 1/2 * b2, 1/2 * (b1 + b2)]
-    #     N_bands = tb.n_projections * len(tb.sublattice_idxs)
-    #     deltas = []
-    #     for k in trims:
-    #         i = np.argmin(np.abs(kx - k[0]))
-    #         j = np.argmin(np.abs(ky - k[1]))
-            # key = f"[{kx[i]},{ky[j]}]"
-            # h_k = H_k[key]
-            # u_k = U_k[key]
-    #         delta_i = 1
-    #         for n in range(0, N_bands, 2):
-    #             u_k_n = np.column_stack((u_k[:, n], u_k[:, n+1])) # Kramers pairs
-    #             P_n = u_k_n.conj().T @ O @ u_k_n.conj() # NOTE: O operator also applies complex conjugate
-    #             xi_n, _ = np.linalg.eigh(P_n)
-    #             delta_i *= round(np.prod(xi_n.real))
-    #         deltas.append(delta_i)
-    #     total_product = np.prod(deltas)
-    #     Z_2 = int((1 - total_product) // 2)  # maps +1 to 0, −1 to 1
-    #     return Z_2
 
     def abelian_chern_invariant(self, band, tol):
         geom = self.geometry
