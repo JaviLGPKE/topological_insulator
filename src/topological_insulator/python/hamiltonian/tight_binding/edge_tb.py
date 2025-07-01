@@ -17,7 +17,7 @@ class TightBindingEdge(TightBinding):
 
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building 'Edge' Hamiltonian...")
-        self.sublattice_data_dict = sublattice_data_dict = self._sublattice_data(geometry)
+        self.sublattice_data_dict = sublattice_data_dict = self.sublattice_data(geometry)
         self.site_data_dict = {k: v for d in sublattice_data_dict.values() for k, v in d.items()}
         idxs_NN = [
             idx
@@ -71,7 +71,7 @@ class TightBindingEdge(TightBinding):
         self.H = H
         print(f"'Edge' Hamiltonian - Done.")
 
-    def _sublattice_data(self, geometry:Geometry):
+    def sublattice_data(self, geometry:Geometry):
         self.edge_idxs = edge_idxs = geometry.get_sublattice_idxs(self.location)
         sites = geometry.sites
         a1, a2 = geometry.a1, geometry.a2 
@@ -83,13 +83,13 @@ class TightBindingEdge(TightBinding):
         for i, idx in enumerate(edge_idxs):
             sub_label = geometry.sublattice_labels[geometry.sublattice_label_idxs[idx]]
             sublattice_data_dict[sub_label] = {}
-            sublattice_data_dict[sub_label][idx] = self.sublattice_data(geometry, self.location, idx)
+            sublattice_data_dict[sub_label][idx] = self._sublattice_data(geometry, self.location, idx)
             sublattice_idxs.append(idx)
             path = sites[idx].copy()
             for _ in range(geometry.N_r - 1):
                 path += T_p
                 sublattice_n = np.where(np.all(np.isclose(sites, path, atol=1e-8), axis=1))[0][0]
-                sublattice_data_dict[sub_label][sublattice_n] = self.sublattice_data(geometry, self.location, sublattice_n)
+                sublattice_data_dict[sub_label][sublattice_n] = self._sublattice_data(geometry, self.location, sublattice_n)
                 sublattice_idxs.append(sublattice_n)
         self.sublattice_idxs = np.array(sorted(sublattice_idxs))
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
@@ -140,7 +140,7 @@ class TightBindingEdge(TightBinding):
         return H_k
     
     def _hoppings_ft(self, geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
-        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
+        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs, "NN")
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
@@ -168,7 +168,7 @@ class TightBindingEdge(TightBinding):
             H_k[row_slice, col_slice] = H_k_ij
     
     def _spin_orbit_coupling_ft(self, geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
-        phase_dict = geometry._get_phase_idxs_NNN(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
+        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs, "NNN")
         # TODO:
 
     def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:

@@ -44,8 +44,8 @@ class Geometry:
 
         print(f"Building Geometry...")
         self._build_lattice(N_r)
-        self._set_nn_connectivity()
-        self._set_nnn_connectivity()
+        self._set_connectivity_NN()
+        self._set_connectivity_NNN()
         self._build_brillouine_zone()
         print(f"Geometry - Done.")
 
@@ -69,7 +69,7 @@ class Geometry:
         self.sublattice_label_idxs = np.array(sublattice_label, dtype=int)
         self.distinct_labels = np.unique(self.sublattice_label_idxs[self.sublattice_label_idxs != 0])
 
-    def _set_nn_connectivity(self, tol=1e-12) -> None:
+    def _set_connectivity_NN(self, tol=1e-12) -> None:
         """
         Sets the connectivity matrix based on whether the distance between two sites
         is within 'reference_dist'.
@@ -106,7 +106,7 @@ class Geometry:
                     nn_list[i].append(j)
         self.nn_list = nn_list
     
-    def _set_nnn_connectivity(self) -> None:
+    def _set_connectivity_NNN(self) -> None:
         """
         Sets the NNN connectivity matrix based on NN connectivity.
         Two sites are NNN if they share a common NN neighbor.
@@ -148,10 +148,11 @@ class Geometry:
             discretization = np.linspace(-factor*np.pi/a, factor*np.pi/a, N_k)
         else:
             raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
+        # Include trim points in k-space
         trim_kx = [t[0] for t in trims]
         trim_ky = [t[1] for t in trims]
-        kx_bulk = np.unique( np.concatenate([discretization, trim_kx]) )
-        ky_bulk = np.unique( np.concatenate([discretization, trim_ky]) )
+        kx_bulk = np.unique(np.concatenate([discretization, trim_kx]))
+        ky_bulk = np.unique(np.concatenate([discretization, trim_ky]))
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
         # Edge
@@ -274,18 +275,20 @@ class Geometry:
                     raise ValueError(f"Site {path} not found in self.sites")
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
-
-    def _get_phase_idxs_NN(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
+    
+    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list, term:str="NN"):
+        phase_dict = {}
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
-        phase_dict = {}
         for idx_j, m_ij in dm_dict.items():
             if idx_j in non_unit_cell_idxs:
                 idx_j_phase = idx_j
-                idx_j = self._find_phase(idx_j_phase, m_ij)
+                find_phase = getattr(self, f"_find_phase_{term}")
+                idx_j = find_phase(idx_j_phase, m_ij)
                 phase_dict[idx_j] = idx_j_phase
             elif idx_j in unit_cell_idxs:
                 if idx_j in phase_dict.keys():
+                    # FIXME: lists to append multiple phases?
                     # skip idx that has established phase
                     continue
                 phase_dict[idx_j] = None
@@ -293,13 +296,7 @@ class Geometry:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
     
-    def _get_phase_idxs_NNN(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
-        phase_dict = {}
-        unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
-        non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
-        return phase_dict
-    
-    def _find_phase(self, idx_j, m_ij):
+    def _find_phase_NN(self, idx_j, m_ij):
         T = self.T
         phase_site = self.sites[idx_j].copy()
         if m_ij > 0: # left direction
@@ -309,6 +306,11 @@ class Geometry:
         idx_j_phase = np.where(
             np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
         return idx_j_phase
+
+    def _find_phase_NNN(self, idx_j, m_ij):
+        embed()
+        phase_site = self.sites[idx_j].copy()
+        return
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
         """

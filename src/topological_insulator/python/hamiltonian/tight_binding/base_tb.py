@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import linalg
+from sympy.physics.quantum.cg import CG
 from sympy import LeviCivita
 from abc import abstractmethod
 
@@ -33,6 +34,10 @@ class TightBinding(Notation):
             for orb in self.orbitals 
             for sigma in self.spin_dict.values()
         ]
+        self.coupled_states = [
+            (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
+            (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
+        ]
         self.n_projections = len(self.uncoupled_states)
         self.U = self._coupled_unitary_transform()
         # Parity
@@ -41,51 +46,48 @@ class TightBinding(Notation):
     def _coupled_unitary_transform(self):
         """
         Transforms the 8x8 Hamiltonian from uncoupled orbital/spin basis 
-        to coupled angular momentum basis, using the Clebsch-Gordan coefficients.
+        to coupled angular momentum basis, using the Clebsch-Gordan (CG) coefficients.
 
         Returns
         -------
         U : np.ndarray
-            The unitary matrix. 
+            The Clebsch-Gordan unitary matrix. 
         """
-        N = len(self.uncoupled_states)
-        U = np.zeros((N, N), dtype=complex)
-        U[0, 0] = 1  # |s, j=1/2, m_j=+1/2⟩ = |s↑⟩
-        U[1, 1] = 1  # |s, j=1/2, m_j=-1/2⟩ = |s↓⟩
-        # 1. Transformation: real p-orbitals → spherical harmonics
-        # Basis: [p_x↑, p_x↓, p_y↑, p_y↓, p_z↑, p_z↓] → [|1,1>↑, |1,1>↓, |1,0>↑, |1,0>↓, |1,-1>↑, |1,-1>↓]
-        U_orb = np.array([
-            [-1/np.sqrt(2), -1j/np.sqrt(2), 0],  # |1,1>
-            [ 1/np.sqrt(2), -1j/np.sqrt(2), 0],  # |1,-1>
-            [ 0,            0,             1]    # |1,0>
-        ], dtype=complex)
-        # Expand to spin space (6x6 matrix)
-        T_real2complex = np.kron(U_orb, np.eye(2))
-        # NOTE: Original order was [|1,1>, |1,-1>, |1,0>] so we swap last two blocks
-        P = np.eye(6)
-        P = P[[0, 1, 4, 5, 2, 3]]  # New order: 0,1 stay; then 4,5; then 2,3
-        T_real2complex = P @ T_real2complex
-        # =============================================
-        # Transformation: complex basis → coupled basis
-        # =============================================
-        # Basis: [|1,1>↑, |1,1>↓, |1,0>↑, |1,0>↓, |1,-1>↑, |1,-1>↓] 
-        # → [j=3/2, m_j=3/2; j=3/2, m_j=1/2; j=3/2, m_j=-1/2; j=3/2, m_j=-3/2; j=1/2, m_j=1/2; j=1/2, m_j=-1/2]
-        T_CG = np.zeros((6, 6), dtype=complex)
-        sqrt1_3 = np.sqrt(1/3)
-        sqrt2_3 = np.sqrt(2/3)
-        # j = 3/2 states
-        T_CG[0, 0] = 1                          # |3/2, 3/2⟩ = |1,1>↑
-        T_CG[1, 1] = sqrt1_3; T_CG[1, 2] = sqrt2_3  # |3/2, 1/2⟩ = √(1/3)|1,1>↓ + √(2/3)|1,0>↑
-        T_CG[2, 3] = sqrt2_3; T_CG[2, 4] = sqrt1_3  # |3/2,-1/2⟩ = √(2/3)|1,0>↓ + √(1/3)|1,-1>↑
-        T_CG[3, 5] = 1                          # |3/2,-3/2⟩ = |1,-1>↓
-        # j = 1/2 states
-        T_CG[4, 1] = sqrt2_3; T_CG[4, 2] = -sqrt1_3  # |1/2, 1/2⟩ = √(2/3)|1,1>↓ - √(1/3)|1,0>↑
-        T_CG[5, 3] = sqrt1_3; T_CG[5, 4] = -sqrt2_3  # |1/2,-1/2⟩ = √(1/3)|1,0>↓ - √(2/3)|1,-1>↑
-        T_p = T_CG @ T_real2complex
-        U[2:, 2:] = T_p
+        # NOTE: follows notebook format
+        M, N = len(self.uncoupled_states), len(self.coupled_states)
+        U = np.zeros((M, N), dtype=complex)
+        # s-orbitals
+        U[0, 0] = CG(0, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        U[1, 1] = CG(0, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        # p-orbitals
+        U[2, 3] =  -1/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
+        U[2, 5] = 1j/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
+        U[2, 6] = CG(1, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        U[3, 2] = 1/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
+        U[3, 4] = 1j/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
+        U[3, 7] = CG(1, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        U[4, 2] = -1/np.sqrt(2) * CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
+        U[4, 4] = 1j/np.sqrt(2) * CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
+        U[5, 3] = -1/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
+        U[5, 5] = 1j/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
+        U[5, 6] = CG(1, 0, 1/2, +1/2, 3/2, +1/2).doit()
+        U[6, 2] = 1/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
+        U[6, 4] = 1j/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
+        U[6, 7] = CG(1, 0, 1/2, -1/2, 3/2, -1/2).doit()
+        U[7, 3] = 1/np.sqrt(2) * CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
+        U[7, 5] = 1j/np.sqrt(2) * CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
         return U
 
     def _time_reversal_operator(self):
+        """
+        The Time-Reversal (TR) operator, for usage always apply the complex conjugate to
+        the operator or state the TR acts upon.
+
+        Returns
+        -------
+        O : np.ndarray
+            The Time-Reversal matrix. 
+        """
         eigenvalue_dict = {}
         S_y = self.pauli_matrix_dict[self.direction_index["y"]]
         for n, sigma_1 in enumerate(self.spin_dict.values()):
@@ -95,9 +97,9 @@ class TightBinding(Notation):
                     eigenvalue_dict[outer_product] = 1j * S_y[n, m]
         O_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         U = self.U
-        O_coupled = U.conj().T @ O_uncoupled @ U
+        O_coupled = U.conj().T @ O_uncoupled @ U.conj()
         O_sublattice = np.identity(n=len(self.delta_vectors))
-        O = np.kron(O_sublattice, O_uncoupled)
+        O = np.kron(O_sublattice, O_coupled)
         return O
 
     @abstractmethod
@@ -261,7 +263,7 @@ class TightBinding(Notation):
         return {}
 
     def zeeman_splitting(self, geometry:Geometry, site_i):
-        # TODO: coupling between spin and orbital
+        # TODO: coupling between spin and orbital i.e. m_l
         eigenvalue_dict = {}
         B = self.cell_parser.field.magnetic.value
         u_B = self.u_B

@@ -46,12 +46,12 @@ class WaveFunction(Notation):
             return self.Z2_invariant()
 
     def Z2_invariant(self):
+        # NOTE: TR invariant is ill defined for gapless dispersions.
         g, tb = self.geometry, self.tight_binding
         O = tb.O # Time-Reversal Operator
         U_k = tb.U_k_dict
         kx, ky = g.kx_bulk, g.ky_bulk
         trims = g.trims
-        # N_tot = tb.n_projections * len(tb.sublattice_idxs)
         deltas = []
         for k in trims:
             i = np.argmin(np.abs(g.kx_bulk - k[0]))
@@ -60,11 +60,11 @@ class WaveFunction(Notation):
             u_k = U_k[key]
             w_k = u_k.conj().T @ O @ u_k.conj()
             w_k_det = np.linalg.det(w_k)
-            P_k = pf.pfaffian(w_k, method='P')
+            P_k = pf.pfaffian(w_k)
             delta_i = np.sqrt(w_k_det) / P_k
             deltas.append(np.sign(delta_i.real))
         total_product = np.prod(deltas)
-        Z_2 = int((1 - total_product) // 2)  # maps +1 to 0, −1 to 1
+        Z_2 = int((1 - total_product) / 2)  # maps +1 to 0, −1 to 1
         return Z_2
 
     def abelian_chern_invariant(self, band, tol):
