@@ -3,17 +3,21 @@
         "name": {"value": "honeycomb"},
         "dimensions": {"value": 2}
     },
+    "field":{
+        "magnetic":{"value": 0, "unit":"T"},
+        "electric":{"value": 0, "unit": "V/m"}
+    },
     "eigenvalues":{
         "A":{"value":{
-            "onsite_energy": {"E_s":0, "E_p":0},
-            "nn_hopping":{"B":{"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
-            "SO_coupling":{"A": {"lambda_pp": 0}}
+            "onsite_energy":{"A":{"E_s":0, "E_p":0}},
+            "nn_hopping":{"B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
+            "SO_coupling":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}}
             }, "unit":"eV"
         },
         "B": {"value":{
-            "onsite_energy":{"E_s":0, "E_p":0},
-            "nn_hopping":{"A": {"t_ss_sigma": -1, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
-            "SO_coupling":{"B": {"lambda_pp": 0}}
+            "onsite_energy":{"B":{"E_s":0, "E_p":0}},
+            "nn_hopping":{"A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
+            "SO_coupling":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0 }}
             }
         }
     },
