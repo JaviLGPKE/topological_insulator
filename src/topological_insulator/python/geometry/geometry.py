@@ -105,7 +105,7 @@ class Geometry:
                 if C[i, j] == 1:
                     nn_list[i].append(j)
         self.nn_list = nn_list
-    
+
     def _set_connectivity_NNN(self) -> None:
         """
         Sets the NNN connectivity matrix based on NN connectivity.
@@ -154,6 +154,7 @@ class Geometry:
         kx_bulk = np.unique(np.concatenate([discretization, trim_kx]))
         ky_bulk = np.unique(np.concatenate([discretization, trim_ky]))
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
+        self.N_k = len(kx_bulk)
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
         # Edge
         if self.model_options.location in ["edge", "both"]:
@@ -276,41 +277,38 @@ class Geometry:
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
     
-    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list, term:str="NN"):
+    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
         phase_dict = {}
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         for idx_j, m_ij in dm_dict.items():
             if idx_j in non_unit_cell_idxs:
                 idx_j_phase = idx_j
-                find_phase = getattr(self, f"_find_phase_{term}")
-                idx_j = find_phase(idx_j_phase, m_ij)
+                idx_j = self._find_site(idx_j_phase, m_ij, unit_cell_idxs)
+                if idx_j is None:
+                    continue # skip phases that don't have associated indexes
                 phase_dict[idx_j] = idx_j_phase
             elif idx_j in unit_cell_idxs:
                 if idx_j in phase_dict.keys():
-                    # FIXME: lists to append multiple phases?
-                    # skip idx that has established phase
-                    continue
+                    continue # skip idx that has established phase
                 phase_dict[idx_j] = None
             else:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
     
-    def _find_phase_NN(self, idx_j, m_ij):
+    def _find_site(self, idx_j_phase, m_ij, unit_cell_idxs):
         T = self.T
-        phase_site = self.sites[idx_j].copy()
-        if m_ij > 0: # left direction
+        phase_site = self.sites[idx_j_phase].copy()
+        if m_ij > 0: # positive direction
             phase_site += T
-        else: # right direction
+        else: # negative direction
             phase_site -= T
-        idx_j_phase = np.where(
+        idx_j = np.where(
             np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-        return idx_j_phase
-
-    def _find_phase_NNN(self, idx_j, m_ij):
-        embed()
-        phase_site = self.sites[idx_j].copy()
-        return
+        if idx_j in unit_cell_idxs:
+            return idx_j
+        else:
+            return None # Bond offers no contribution?
 
     def plot_lattice(self, ax=None, sites_of_interest=None):
         """
