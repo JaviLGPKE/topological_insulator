@@ -75,10 +75,11 @@ class TightBindingBulk(TightBinding):
         sublattice_dict = {geometry.label_mapper[n]: {"H_k_ij": 0} for n in range(N_sites)}
         idx_i = data["idx"]
         idx_i_label = geometry.get_label(idx_i)
-        # Diagonal: On-site Energy
+        # Diagonal: Staggered Sublattice Potential
         m_ij = data["staggered_potential_dict"][idx_i].copy()
         sublattice_dict[idx_i_label]["H_k_ij"] += m_ij
-        # Off-Diagonal: Hoppings
+        # Off-Diagonal: Electron Tunelling
+        
         for idx_j in data["NN_idxs"]:
             idx_j_label = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NN"][idx_j].copy() 

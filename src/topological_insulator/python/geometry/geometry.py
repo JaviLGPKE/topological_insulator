@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.spatial import Delaunay, cKDTree
 
 from ..model_options import ModelOptions
 from ..cell_parser import CellParser
@@ -35,7 +36,7 @@ class Geometry:
             The dictionary containing the geometrical parameters to replicate the lattice.
         """
         self.N_r = N_r = self.model_options.N_r
-        self.N_k = self.model_options.N_k
+        self.N_k = N_k = self.model_options.N_k
         self.dangling_bonds = dangling_bonds = self.model_options.dangling_bonds
 
         parser = self.cell_parser.geometry
@@ -45,11 +46,14 @@ class Geometry:
         print(f"Building Geometry...")
         self._build_lattice(N_r)
         self._set_connectivity_NN()
+        if not dangling_bonds:
+            # NOTE: do not move position of logic
+            self._prune_dangling()
         self._set_connectivity_NNN()
-        self._build_brillouine_zone()
+        self._build_brillouine_zone(N_k)
         print(f"Geometry - Done.")
 
-    def _build_lattice(self, N_r):
+    def _build_lattice(self, N_r, dangling_bonds:bool=True):
         a1, a2 = self.a1, self.a2
         # Build lattice
         sites, edge_sites, sublattice_label = [], [], []
@@ -105,7 +109,7 @@ class Geometry:
                 if C[i, j] == 1:
                     nn_list[i].append(j)
         self.nn_list = nn_list
-    
+
     def _set_connectivity_NNN(self) -> None:
         """
         Sets the NNN connectivity matrix based on NN connectivity.
@@ -123,18 +127,99 @@ class Geometry:
                         continue
                     if k not in neighbors_of_i: # Exclude direct neighbors
                         nnn_candidates.add(k)
-            # Set symmetric connections
+            # Enforce Symmetry
             for k in nnn_candidates:
                 C[i, k] = 1
                 C[k, i] = 1
         self.nnn_connectivity_matrix = C
 
+    def _prune_dangling(self):
+        """
+        Remove dangling bonds and update edge sites based on coordination numbers.
+        """
+        edge_set = set()
+        for site in self.edge_sites:
+            rounded_site = (round(site[0], 8), round(site[1], 8))
+            edge_set.add(rounded_site)
+
+        is_edge = [
+            (round(site[0], 8), round(site[1], 8)) in edge_set
+            for site in self.sites
+        ]
+        coordinations = [len(nn) for nn in self.nn_list]
+        distinct_labels = np.unique(self.sublattice_label_idxs)
+        typical_nn_dict = {}
+        for label in distinct_labels:
+            non_edge_indices = [
+                idx for idx in range(len(self.sites))
+                if (self.sublattice_label_idxs[idx] == label) and (not is_edge[idx])
+            ]
+            if not non_edge_indices:
+                typical_nn_dict[label] = None
+            else:
+                bulk_coords = [coordinations[i] for i in non_edge_indices]
+                values, counts = np.unique(bulk_coords, return_counts=True)
+                typical_nn_dict[label] = values[np.argmax(counts)]
+        keep_indices = []
+        for idx in range(len(self.sites)):
+            if not is_edge[idx]:
+                keep_indices.append(idx)
+            else:
+                label = self.sublattice_label_idxs[idx]
+                typical_nn = typical_nn_dict[label]
+                if typical_nn is None:
+                    keep_indices.append(idx)
+                elif coordinations[idx] >= typical_nn - 1:
+                    keep_indices.append(idx)
+        # Update lattice properties
+        keep_indices = np.array(keep_indices)
+        self.sites = self.sites[keep_indices]
+        self.sublattice_label_idxs = self.sublattice_label_idxs[keep_indices]
+        # Rebuild connectivity with remaining sites
+        self._set_connectivity_NN()
+        # Update edge sites
+        self._update_edge_sites()
+
+    def _update_edge_sites(self):
+        sites = self.sites
+        pts = sites[:, :2]
+        tri = Delaunay(pts)
+        edges = {}
+        for simplex in tri.simplices:
+            for i,j in ((0,1),(1,2),(2,0)):
+                a, b = sorted([simplex[i], simplex[j]])
+                edges.setdefault((a,b), 0)
+                edges[(a,b)] += 1
+        boundary_edges = [edge for edge,count in edges.items() if count == 1]
+        edge_indices = sorted({i for e in boundary_edges for i in e})
+        tree  = cKDTree(sites)
+        seed_idxs = np.array(edge_indices, dtype=int)
+        radius = 1.01 * self.lattice_constant
+        bonded = tree.query_ball_point(sites[seed_idxs], r=radius)
+        all_edge = set(seed_idxs.tolist())
+        for nbr_list in bonded:
+            all_edge.update(nbr_list)
+        self.edge_indices = sorted(all_edge)
+        self.edge_sites   = sites[self.edge_indices]
+        
+    def get_edge_from_sites(self):
+        site_dict = {}
+        for idx, site in enumerate(self.sites):
+            key = (round(site[0], 8), round(site[1], 8))
+            site_dict[key] = idx
+        
+        indices = []
+        for coord in self.edge_sites:
+            key = (round(coord[0], 8), round(coord[1], 8))
+            if key in site_dict:
+                indices.append(site_dict[key])
+        return indices
+
     def get_label(self, idx):
         return self.sublattice_labels[self.sublattice_label_idxs[idx]]
 
-    def _build_brillouine_zone(self):
+    def _build_brillouine_zone(self, N_k):
         factor = 2
-        N_k = self.N_k
         a = self.lattice_constant
         a1, a2 = self.a1, self.a2
         A = a1[0]*a2[1] - a1[1]*a2[0]
@@ -154,6 +239,7 @@ class Geometry:
         kx_bulk = np.unique(np.concatenate([discretization, trim_kx]))
         ky_bulk = np.unique(np.concatenate([discretization, trim_ky]))
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
+        self.N_k = len(kx_bulk)
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
         # Edge
         if self.model_options.location in ["edge", "both"]:
@@ -180,8 +266,8 @@ class Geometry:
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
-            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/3, rtol=2.2e-1*a))[0]
-            y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=2.5e-1*a))[0]
+            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/3, rtol=5e-1*a))[0]
+            y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=5e-1*a))[0]
             edge_idxs = np.intersect1d(x_idxs, y_idxs)
             candidate_edge_sites = edge_sites[edge_idxs]
             idx_candidates = [np.where((sites == candidate).all(axis=1))[0][0] for candidate in candidate_edge_sites]
@@ -196,14 +282,14 @@ class Geometry:
         unit_cell_idxs = self._find_unit_cell(chosen_idx)
         return sorted(unit_cell_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
 
-    def _find_unit_cell(self, sub_A_idx, tol=1e-5):
+    def _find_unit_cell(self, sub_A_idx, atol=1e-8):
         unit_cell = [sub_A_idx]
         for n, d in enumerate(self.delta_vectors):
             if n == 0:
                 # 1st delta vector corresponds to [0, 0], equivalent to sublattice A
                 continue 
             site = self.sites[sub_A_idx].copy() + d
-            idx = np.where(np.all(np.isclose(self.sites, site, atol=1e-8), axis=1))[0][0]
+            idx = np.where(np.all(np.isclose(self.sites, site, atol=atol), axis=1))[0][0]
             unit_cell.append(idx)
         assert(len(unit_cell) == self.n_sublattices)
         return unit_cell
@@ -276,43 +362,40 @@ class Geometry:
                 sublattices_considered[label].append(site_i[0])
         return sublattices_considered
     
-    def _get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list, term:str="NN"):
+    def get_phase_idxs(self, idx_i:int, dm_dict:dict, sublattice_idxs:list):
         phase_dict = {}
         unit_cell_idxs = [idx for idx in dm_dict.keys() if idx in sublattice_idxs]
         non_unit_cell_idxs = [idx for idx in dm_dict.keys() if idx not in sublattice_idxs]
         for idx_j, m_ij in dm_dict.items():
             if idx_j in non_unit_cell_idxs:
                 idx_j_phase = idx_j
-                find_phase = getattr(self, f"_find_phase_{term}")
-                idx_j = find_phase(idx_j_phase, m_ij)
+                idx_j = self._find_site(idx_j_phase, m_ij, unit_cell_idxs)
+                if idx_j is None:
+                    continue # skip phases that don't have associated indexes
                 phase_dict[idx_j] = idx_j_phase
             elif idx_j in unit_cell_idxs:
                 if idx_j in phase_dict.keys():
-                    # FIXME: lists to append multiple phases?
-                    # skip idx that has established phase
-                    continue
+                    continue # skip idx that has established phase
                 phase_dict[idx_j] = None
             else:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
-    
-    def _find_phase_NN(self, idx_j, m_ij):
+
+    def _find_site(self, idx_j_phase, m_ij, unit_cell_idxs):
         T = self.T
-        phase_site = self.sites[idx_j].copy()
-        if m_ij > 0: # left direction
+        phase_site = self.sites[idx_j_phase].copy()
+        if m_ij > 0: # positive direction
             phase_site += T
-        else: # right direction
+        else: # negative direction
             phase_site -= T
-        idx_j_phase = np.where(
+        idx_j = np.where(
             np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-        return idx_j_phase
+        if idx_j in unit_cell_idxs:
+            return idx_j
+        else:
+            return None # Bond offers no contribution?
 
-    def _find_phase_NNN(self, idx_j, m_ij):
-        embed()
-        phase_site = self.sites[idx_j].copy()
-        return
-
-    def plot_lattice(self, ax=None, sites_of_interest=None):
+    def plot_lattice(self, sites_of_interest=None, ax=None):
         """
         Plots the 2D geometry of the lattice:
         - Sites as colored dots (each color = one sublattice).
@@ -320,11 +403,11 @@ class Geometry:
 
         Parameters
         ----------
+        sites_of_interest: allows user to highlight sites using 
+            the idxs corresponding indexes
         ax : matplotlib.axes._axes.Axes, optional
             If provided, the function will draw on this Axes.
             Otherwise, it will create a new figure and Axes.
-        sites_of_interest: allows user to highlight sites using 
-            the idxs corresponding indexes
         """
         if self.n_dim != 2:
             raise ValueError("plot_geometry is designed for 2D lattices (n_dim=2).")
