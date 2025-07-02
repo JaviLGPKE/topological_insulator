@@ -105,8 +105,16 @@ class TightBindingEdge(TightBinding):
             self._spin_orbit_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
+            # Staggered Sublattice Potential
+            self._staggered_potential_ft(
+                row_slice, idx_i, site_dict_i, H_k
+            )
+            # Zeeman Splitting
+            self._zeeman_splitting(
+                row_slice, idx_i, site_dict_i, H_k
+            )
         return H_k
-    
+
     def _hoppings_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
         phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
@@ -117,8 +125,8 @@ class TightBindingEdge(TightBinding):
                 m_ij = site_dict_i["dm_dict_NN"][idx_j].copy()
                 t_ij = site_dict_i["hopping_dict"][idx_j].copy()
             else:
-                m_ij = site_dict_i["dm_dict_NNN"][idx_j]
-                dr = site_dict_i["dr_dict_NNN"][idx_j]
+                dr_list, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
+                dr, m_ij = dr_list[0], dm_list[0]
                 bond_length = np.linalg.norm(dr)
                 cosines = dr / bond_length
                 eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
@@ -133,7 +141,7 @@ class TightBindingEdge(TightBinding):
                 bloch_phase =  np.exp(1j * k * m_ij_phase)
                 H_k_ij += bloch_phase * t_ij_phase
             H_k[row_slice, col_slice] = H_k_ij
-    
+
     def _spin_orbit_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
         phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
@@ -144,11 +152,9 @@ class TightBindingEdge(TightBinding):
                 m_ij = site_dict_i["dm_dict_NNN"][idx_j].copy()
                 t_ij = site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
             else:
-                m_ij = site_dict_i["dm_dict_NN"][idx_j]
-                dr = site_dict_i["dr_dict_NN"][idx_j]
-                bond_length = np.linalg.norm(dr)
-                cosines = dr / bond_length
-                eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
+                _, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
+                m_ij = dm_list[0]
+                eigenvalue_dict = self.spin_orbit_coupling(geometry, idx_i, idx_j)
                 H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
                 t_ij = self.U.conj().T @ H_uncoupled @ self.U
             bloch_phase = np.exp(1j * k * m_ij)
@@ -160,6 +166,18 @@ class TightBindingEdge(TightBinding):
                 bloch_phase =  np.exp(1j * k * m_ij_phase)
                 H_k_ij += bloch_phase * t_ij_phase
             H_k[row_slice, col_slice] = H_k_ij
+
+    def _staggered_potential_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        z_ii = site_dict_i["staggered_potential_dict"][idx_i]
+        H_k_ii += z_ii
+        H_k[row_slice, row_slice] = H_k_ii
+
+    def _zeeman_splitting(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        z_ii = site_dict_i["zeeman_splitting_dict"][idx_i]
+        H_k_ii += z_ii
+        H_k[row_slice, row_slice] = H_k_ii
 
     def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
