@@ -51,11 +51,14 @@ class TightBindingEdge(TightBinding):
             sublattice_data_dict[sub_label][idx] = self._sublattice_data(geometry, self.location, idx)
             sublattice_idxs.append(idx)
             path = sites[idx].copy()
-            for _ in range(geometry.N_r - 1):
+            for i in range(geometry.N_r - 1):
                 path += T_p
-                sublattice_n = np.where(np.all(np.isclose(sites, path, atol=1e-8), axis=1))[0][0]
-                sublattice_data_dict[sub_label][sublattice_n] = self._sublattice_data(geometry, self.location, sublattice_n)
-                sublattice_idxs.append(sublattice_n)
+                try:
+                    sublattice_n = np.where(np.all(np.isclose(sites, path, atol=1e-8), axis=1))[0][0]
+                    sublattice_data_dict[sub_label][sublattice_n] = self._sublattice_data(geometry, self.location, sublattice_n)
+                    sublattice_idxs.append(sublattice_n)
+                except:
+                    pass
         self.sublattice_idxs = np.array(sorted(sublattice_idxs))
         assert(list(sublattice_data_dict.keys()) == geometry.sublattice_labels[:geometry.n_sublattices])
         return sublattice_data_dict
@@ -105,7 +108,7 @@ class TightBindingEdge(TightBinding):
         return H_k
     
     def _hoppings_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
-        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
+        phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
@@ -132,7 +135,7 @@ class TightBindingEdge(TightBinding):
             H_k[row_slice, col_slice] = H_k_ij
     
     def _spin_orbit_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
-        phase_dict = geometry._get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
+        phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
