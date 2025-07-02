@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 from matplotlib import pyplot as plt
 from scipy.spatial import Delaunay, cKDTree
 
@@ -282,17 +283,56 @@ class Geometry:
         unit_cell_idxs = self._find_unit_cell(chosen_idx)
         return sorted(unit_cell_idxs, key=lambda idx: self.sublattice_label_idxs[idx])
 
-    def _find_unit_cell(self, sub_A_idx, tol=1e-5):
+    def _find_unit_cell(self, sub_A_idx):
+        C = self.nn_list
+        label_idx = self.sublattice_label_idxs[sub_A_idx]
+        sub_label = self.sublattice_labels[label_idx]
+        sub_site = self.sites[sub_A_idx]
+        x_A = sub_site[0]
+        
         unit_cell = [sub_A_idx]
-        for n, d in enumerate(self.delta_vectors):
-            if n == 0:
-                # 1st delta vector corresponds to [0, 0], equivalent to sublattice A
-                continue 
-            site = self.sites[sub_A_idx].copy() + d
-            idx = np.where(np.all(np.isclose(self.sites, site, atol=1e-8), axis=1))[0][0]
-            unit_cell.append(idx)
-        assert(len(unit_cell) == self.n_sublattices)
-        return unit_cell
+        
+        candidates = []
+        for nbr in C[sub_A_idx]:
+            nbr_label_idx = self.sublattice_label_idxs[nbr]
+            nbr_label = self.sublattice_labels[nbr_label_idx]
+            if nbr_label == sub_label:
+                continue
+            if self.sites[nbr][0] >= x_A:
+                continue
+            candidates.append(nbr)
+        
+        if not candidates:
+            return unit_cell
+        
+        groups_dict = {}
+        for cand in candidates:
+            cand_label_idx = self.sublattice_label_idxs[cand]
+            cand_label = self.sublattice_labels[cand_label_idx]
+            if cand_label not in groups_dict:
+                groups_dict[cand_label] = []
+            groups_dict[cand_label].append(cand)
+        
+        groups = list(groups_dict.values())
+        n_groups = len(groups)
+        group_indices = list(range(n_groups))
+        
+        def is_clique(node_list):
+            n = len(node_list)
+            for i in range(n):
+                for j in range(i+1, n):
+                    if node_list[j] not in C[node_list[i]]:
+                        return False
+            return True
+        
+        for k in range(n_groups, 0, -1):
+            for subset_indices in itertools.combinations(group_indices, k):
+                selected_groups = [groups[i] for i in subset_indices]
+                for prod in itertools.product(*selected_groups):
+                    prod_list = list(prod)
+                    if is_clique(prod_list):
+                        unit_cell.extend(prod_list)
+                        return unit_cell
 
     def get_neighbour_idxs(self, site_idx):
         C = self.nn_connectivity_matrix
