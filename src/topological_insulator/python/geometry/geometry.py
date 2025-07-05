@@ -304,20 +304,19 @@ class Geometry:
         next_neighbours_idx = np.where(C[site_idx, :] == 1)[0]
         return next_neighbours_idx
 
-    def get_chirality(self, site_i, site_j):
-        neighbours_i = self.get_neighbour_idxs(site_i)
-        neighbours_j = self.get_neighbour_idxs(site_j)
+    def get_chirality(self, idx_i, idx_j):
+        neighbours_i = self.get_neighbour_idxs(idx_i)
+        neighbours_j = self.get_neighbour_idxs(idx_j)
         shared_neighbors = set(neighbours_i).intersection(neighbours_j)
         if not shared_neighbors:
-            raise ValueError(f"No shared neighbor between {site_i} and {site_j}")
-        k = next(iter(shared_neighbors))  # Take the first shared neighbor
-        r_i = np.array(self.sites[site_i])
-        r_j = np.array(self.sites[site_j])
-        r_k = np.array(self.sites[k])
+            raise ValueError(f"No shared neighbor between {idx_i} and {idx_j}")
+        idx_k = next(iter(shared_neighbors))  # Take the first shared neighbor
+        r_i = np.array(self.sites[idx_i])
+        r_j = np.array(self.sites[idx_j])
+        r_k = np.array(self.sites[idx_k])
         d1 = r_k - r_i
         d2 = r_j - r_k
-        cross_z = d1[0] * d2[1] - d1[1] * d2[0]
-        nu_ij = int(np.sign(cross_z))
+        nu_ij = d1[0] * d2[1] - d1[1] * d2[0]
         return nu_ij
 
     def get_dr(self, location, bulk_idx, neighbour_idxs, type="list"):

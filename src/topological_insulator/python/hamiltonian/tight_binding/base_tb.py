@@ -163,8 +163,8 @@ class TightBinding(Notation):
                 "staggered_potential_dict": m_ij_dict     
         }
 
-    def slater_koster_hoppings(self, geometry, site_i, site_j, cosines):
-        label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
+    def slater_koster_hoppings(self, geometry, idx_i, idx_j, cosines):
+        label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"]
         t_ss = nn_parser[label_j]["t_ss_sigma"]
@@ -215,14 +215,14 @@ class TightBinding(Notation):
                             eigenvalue_dict[outer_product] = H_t if sigma_1 == sigma_2 else 0
         return eigenvalue_dict
 
-    def spin_orbit_coupling(self, geometry:Geometry, site_i, site_j):
-        label_i, label_j = geometry.get_label(site_i), geometry.get_label(site_j)
+    def spin_orbit_coupling(self, geometry:Geometry, idx_i, idx_j):
+        label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         so_parser = eigenvalue_parser.value["SO_coupling"][label_j]
         lambda_ss = so_parser["lambda_ss"]
         lambda_sp = so_parser["lambda_sp"]
         lambda_pp = so_parser["lambda_pp"]
-        v_ij = geometry.get_chirality(site_i, site_j)
+        v_ij = geometry.get_chirality(idx_i, idx_j)
         eigenvalue_dict = {}
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
