@@ -103,21 +103,17 @@ class TightBindingEdge(TightBinding):
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
             # Spin-Orbit Coupling
-            # self._spin_orbit_coupling_ft(
-            #     geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
-            # )
-            # # Staggered Sublattice Potential
-            # self._staggered_potential_ft(
-            #     row_slice, idx_i, site_dict_i, H_k
-            # )
-            # # Zeeman Splitting
-            # self._zeeman_splitting_ft(
-            #     row_slice, idx_i, site_dict_i, H_k
-        #     # )
-        # if k == geometry.k_edge[0]:
-        #     self.H_k_0 = H_k
-        # if k != geometry.k_edge[0] and self.H_k_0 is not None:
-        #     embed()
+            self._spin_orbit_coupling_ft(
+                geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            )
+            # Staggered Sublattice Potential
+            self._staggered_potential_ft(
+                row_slice, idx_i, site_dict_i, H_k
+            )
+            # Zeeman Splitting
+            self._zeeman_splitting_ft(
+                row_slice, idx_i, site_dict_i, H_k
+            )
         return H_k
 
     def _hoppings_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):

@@ -368,7 +368,7 @@ class Geometry:
         for idx_j, m_ij in dm_dict.items():
             if idx_j in non_unit_cell_idxs:
                 idx_j_phase = idx_j
-                idx_j = self._find_site(idx_j_phase, m_ij, unit_cell_idxs)
+                idx_j = self._find_site(idx_j_phase, m_ij, sublattice_idxs)
                 if idx_j is None:
                     continue # skip phases that don't have associated indexes
                 phase_dict[idx_j] = idx_j_phase
@@ -380,7 +380,7 @@ class Geometry:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
 
-    def _find_site(self, idx_j_phase, m_ij, unit_cell_idxs):
+    def _find_site(self, idx_j_phase, m_ij, sublattice_idxs):
         T = self.T
         phase_site = self.sites[idx_j_phase].copy()
         if m_ij > 0: # positive direction
@@ -389,7 +389,7 @@ class Geometry:
             phase_site -= T
         idx_j = np.where(
             np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-        if idx_j in unit_cell_idxs:
+        if idx_j in sublattice_idxs:
             return idx_j
         else:
             return None # Bond offers no contribution?
