@@ -99,14 +99,13 @@ class TightBindingEdge(TightBinding):
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
             # Hoppings
-            # self._hoppings_ft(
-            #     geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
-            # )
-            # Spin-Orbit Coupling
-            self._spin_orbit_coupling_ft(
+            self._hoppings_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
-            
+            # Spin-Orbit Coupling
+            # self._spin_orbit_coupling_ft(
+            #     geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            # )
             # # Staggered Sublattice Potential
             # self._staggered_potential_ft(
             #     row_slice, idx_i, site_dict_i, H_k
@@ -126,20 +125,13 @@ class TightBindingEdge(TightBinding):
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
+            H_k_ij = 0
             # Site
             if idx_j in site_dict_i["NN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NN"][idx_j].copy()
                 t_ij = site_dict_i["hopping_dict"][idx_j].copy()
-            else:
-                dr_list, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
-                dr, m_ij = dr_list[0], dm_list[0]
-                bond_length = np.linalg.norm(dr)
-                cosines = dr / bond_length
-                eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
-                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                t_ij = self.U.conj().T @ H_uncoupled @ self.U
-            bloch_phase = np.exp(1j * k * m_ij)
-            H_k_ij = bloch_phase * t_ij
+                bloch_phase = np.exp(1j * k * m_ij)
+                H_k_ij += bloch_phase * t_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NN"][idx_j_phase].copy()
@@ -153,18 +145,13 @@ class TightBindingEdge(TightBinding):
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
+            H_k_ij = 0
             # Site
             if idx_j in site_dict_i["NNN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NNN"][idx_j].copy()
                 s_ij = site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
-            else:
-                _, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
-                m_ij = dm_list[0]
-                eigenvalue_dict = self.spin_orbit_coupling(geometry, idx_i, idx_j)
-                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                s_ij = self.U.conj().T @ H_uncoupled @ self.U
-            bloch_phase = np.exp(1j * k * m_ij)
-            H_k_ij = bloch_phase * s_ij
+                bloch_phase = np.exp(1j * k * m_ij)
+                H_k_ij += bloch_phase * s_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NNN"][idx_j_phase].copy()
