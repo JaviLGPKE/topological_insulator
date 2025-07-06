@@ -304,20 +304,19 @@ class Geometry:
         next_neighbours_idx = np.where(C[site_idx, :] == 1)[0]
         return next_neighbours_idx
 
-    def get_chirality(self, site_i, site_j):
-        neighbours_i = self.get_neighbour_idxs(site_i)
-        neighbours_j = self.get_neighbour_idxs(site_j)
+    def get_chirality(self, idx_i, idx_j):
+        neighbours_i = self.get_neighbour_idxs(idx_i)
+        neighbours_j = self.get_neighbour_idxs(idx_j)
         shared_neighbors = set(neighbours_i).intersection(neighbours_j)
         if not shared_neighbors:
-            raise ValueError(f"No shared neighbor between {site_i} and {site_j}")
-        k = next(iter(shared_neighbors))  # Take the first shared neighbor
-        r_i = np.array(self.sites[site_i])
-        r_j = np.array(self.sites[site_j])
-        r_k = np.array(self.sites[k])
+            raise ValueError(f"No shared neighbor between {idx_i} and {idx_j}")
+        idx_k = next(iter(shared_neighbors))  # Take the first shared neighbor
+        r_i = np.array(self.sites[idx_i])
+        r_j = np.array(self.sites[idx_j])
+        r_k = np.array(self.sites[idx_k])
         d1 = r_k - r_i
         d2 = r_j - r_k
-        cross_z = d1[0] * d2[1] - d1[1] * d2[0]
-        nu_ij = int(np.sign(cross_z))
+        nu_ij = d1[0] * d2[1] - d1[1] * d2[0]
         return nu_ij
 
     def get_dr(self, location, bulk_idx, neighbour_idxs, type="list"):
@@ -369,7 +368,7 @@ class Geometry:
         for idx_j, m_ij in dm_dict.items():
             if idx_j in non_unit_cell_idxs:
                 idx_j_phase = idx_j
-                idx_j = self._find_site(idx_j_phase, m_ij, unit_cell_idxs)
+                idx_j = self._find_site(idx_j_phase, m_ij, sublattice_idxs)
                 if idx_j is None:
                     continue # skip phases that don't have associated indexes
                 phase_dict[idx_j] = idx_j_phase
@@ -381,7 +380,7 @@ class Geometry:
                 raise ValueError(f"'{idx_j}' not in dm_dict")
         return phase_dict
 
-    def _find_site(self, idx_j_phase, m_ij, unit_cell_idxs):
+    def _find_site(self, idx_j_phase, m_ij, sublattice_idxs):
         T = self.T
         phase_site = self.sites[idx_j_phase].copy()
         if m_ij > 0: # positive direction
@@ -390,7 +389,7 @@ class Geometry:
             phase_site -= T
         idx_j = np.where(
             np.all(np.isclose(self.sites, phase_site, atol=1e-8), axis=1))[0][0]
-        if idx_j in unit_cell_idxs:
+        if idx_j in sublattice_idxs:
             return idx_j
         else:
             return None # Bond offers no contribution?

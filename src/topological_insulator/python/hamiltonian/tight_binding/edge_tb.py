@@ -14,6 +14,7 @@ class TightBindingEdge(TightBinding):
     def __init__(self, model_options, cell_parser):
         super().__init__(model_options, cell_parser)
         self.location = "edge"  
+        self.H_k_0 = None
 
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building 'Edge' Hamiltonian...")
@@ -120,20 +121,13 @@ class TightBindingEdge(TightBinding):
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
+            H_k_ij = 0
             # Site
             if idx_j in site_dict_i["NN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NN"][idx_j].copy()
                 t_ij = site_dict_i["hopping_dict"][idx_j].copy()
-            else:
-                dr_list, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
-                dr, m_ij = dr_list[0], dm_list[0]
-                bond_length = np.linalg.norm(dr)
-                cosines = dr / bond_length
-                eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
-                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                t_ij = self.U.conj().T @ H_uncoupled @ self.U
-            bloch_phase = np.exp(1j * k * m_ij)
-            H_k_ij = bloch_phase * t_ij
+                bloch_phase = np.exp(1j * k * m_ij)
+                H_k_ij += bloch_phase * t_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NN"][idx_j_phase].copy()
@@ -147,18 +141,13 @@ class TightBindingEdge(TightBinding):
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
             col_slice = slice(j * N_projections, (j + 1) * N_projections)
+            H_k_ij = 0
             # Site
             if idx_j in site_dict_i["NNN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NNN"][idx_j].copy()
                 s_ij = site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
-            else:
-                _, dm_list = geometry.get_dr(self.location, idx_i, [idx_j])
-                m_ij = dm_list[0]
-                eigenvalue_dict = self.spin_orbit_coupling(geometry, idx_i, idx_j)
-                H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-                s_ij = self.U.conj().T @ H_uncoupled @ self.U
-            bloch_phase = np.exp(1j * k * m_ij)
-            H_k_ij = bloch_phase * s_ij
+                bloch_phase = np.exp(1j * k * m_ij)
+                H_k_ij += bloch_phase * s_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NNN"][idx_j_phase].copy()

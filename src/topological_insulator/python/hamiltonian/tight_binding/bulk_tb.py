@@ -68,34 +68,35 @@ class TightBindingBulk(TightBinding):
             for j in range(N_sites):
                 sublattice_j_label = geometry.label_mapper[j]
                 col_slice = slice(j * N_projections, (j + 1) * N_projections)
-                H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]["H_k_ij"]
+                H_k[row_slice, col_slice] = sublattice_dict[sublattice_j_label]
         return H_k
 
     def get_sublattice_dict(self, geometry, data, k, N_sites):
-        sublattice_dict = {geometry.label_mapper[n]: {"H_k_ij": 0} for n in range(N_sites)}
+        sublattice_dict = {geometry.label_mapper[n]: 0 for n in range(N_sites)}
         idx_i = data["idx"]
-        idx_i_label = geometry.get_label(idx_i)
+        label_i = geometry.get_label(idx_i)
         # Diagonal: Staggered Sublattice Potential
         m_ij = data["staggered_potential_dict"][idx_i].copy()
-        sublattice_dict[idx_i_label]["H_k_ij"] += m_ij
+        sublattice_dict[label_i] += m_ij
         # Off-Diagonal: Electron Tunelling
-        
         for idx_j in data["NN_idxs"]:
-            idx_j_label = geometry.get_label(idx_j)
+            label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NN"][idx_j].copy() 
             t_ij = data["hopping_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
-            sublattice_dict[idx_j_label]["H_k_ij"] += bloch_phase * t_ij
+            sublattice_dict[label_j] += bloch_phase * t_ij
         # Diagonal: Spin-Orbit Coupling
         for idx_j in data["NNN_idxs"]:
-            idx_j_label = geometry.get_label(idx_j)
+            label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NNN"][idx_j].copy()
             s_ij =  data["spin_orbit_coupling_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
-            sublattice_dict[idx_j_label]["H_k_ij"] += bloch_phase * s_ij
+            sublattice_dict[label_j] += bloch_phase * s_ij
+            # if (label_i == "C") and (np.allclose(k, np.array([geometry.kx_bulk[10], geometry.ky_bulk[10]]))):
+            #     embed()
         # Diagonal: Zeeman-Splitting
         z_ij = data["zeeman_splitting_dict"][idx_i].copy()
-        sublattice_dict[idx_i_label]["H_k_ij"] += z_ij
+        sublattice_dict[label_i] += z_ij
         return sublattice_dict 
 
     def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
