@@ -236,8 +236,8 @@ class Geometry:
         # Include trim points in k-space
         trim_kx = [t[0] for t in trims]
         trim_ky = [t[1] for t in trims]
-        kx_bulk = np.unique(np.concatenate([discretization, trim_kx]))
-        ky_bulk = np.unique(np.concatenate([discretization, trim_ky]))
+        kx_bulk = np.unique(np.concatenate([discretization, trim_kx, ((b1 + b2)/3).tolist()]))
+        ky_bulk = np.unique(np.concatenate([discretization, trim_ky, ((b1 + b2)/3).tolist()]))
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
         self.N_k = len(kx_bulk)
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
