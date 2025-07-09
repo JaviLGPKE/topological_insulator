@@ -29,10 +29,16 @@ class TightBinding(Notation):
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
         self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
         # Clebsch-Gordan Coefficients
-        self.uncoupled_states = [
+        self.orbital_states = [
             (orb, sigma) 
             for orb in self.orbitals 
             for sigma in self.spin_dict.values()
+        ]
+        self.uncoupled_states = [
+            ((0, 0), (1/2, +1/2)), ((0, 0), (1/2, -1/2)), 
+            ((1, +1), ((1/2, +1/2))), ((1, +1), (1/2, -1/2)),
+            ((1, -1), ((1/2, +1/2))), ((1, -1), (1/2, -1/2)),
+            ((1, 0), ((1/2, +1/2))), ((1, 0), (1/2, -1/2))
         ]
         self.coupled_states = [
             (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
@@ -40,13 +46,13 @@ class TightBinding(Notation):
         ]
         self.n_projections = len(self.uncoupled_states)
         self.U = self._coupled_unitary_transform()
-        self.M = self._orbital_unitary_transform()
+        self.J = self._harmonic_unitary_transform()
         # Parity
         self.O = self._time_reversal_operator()
 
     def _coupled_unitary_transform(self):
         """
-        Transforms the 8x8 Hamiltonian from uncoupled orbital/spin basis 
+        Transforms the 8x8 Hamiltonian from uncoupled angular momentum/spin basis 
         to coupled angular momentum basis, using the Clebsch-Gordan (CG) coefficients.
 
         Returns
@@ -55,69 +61,52 @@ class TightBinding(Notation):
             The Clebsch-Gordan unitary matrix. 
         """
         # NOTE: follows notebook format
-        import numpy as np
-        sqrt = np.sqrt
-
-        # Identity for s-orbitals (unchanged)
-        U_s = np.eye(2)
-
-        # Corrected U_p for p-orbitals
-        U_p = np.zeros((6, 6))
-        # j=1/2, m_j=+1/2: coefficients for |m_l=0, ↑> (col1) and |m_l=+1, ↓> (col5)
-        U_p[0, 1] =  sqrt(1/3)  # |m_l=0, ↑>
-        U_p[0, 5] = -sqrt(2/3)  # |m_l=+1, ↓>
-
-        # j=1/2, m_j=-1/2: coefficients for |m_l=-1, ↑> (col0) and |m_l=0, ↓> (col4)
-        U_p[1, 0] = -sqrt(2/3)  # |m_l=-1, ↑>
-        U_p[1, 4] =  sqrt(1/3)  # |m_l=0, ↓>
-
-        # j=3/2 states (unchanged)
-        U_p[2, 2] = 1          # |m_l=+1, ↑> (j=3/2, m_j=+3/2)
-        U_p[3, 1] =  sqrt(2/3) # |m_l=0, ↑> (j=3/2, m_j=+1/2)
-        U_p[3, 5] =  sqrt(1/3) # |m_l=+1, ↓> (j=3/2, m_j=+1/2)
-        U_p[4, 0] =  sqrt(1/3) # |m_l=-1, ↑> (j=3/2, m_j=-1/2)
-        U_p[4, 4] =  sqrt(2/3) # |m_l=0, ↓> (j=3/2, m_j=-1/2)
-        U_p[5, 3] = 1          # |m_l=-1, ↓> (j=3/2, m_j=-3/2)
-
-        # Build joint U (unchanged)
-        U = np.zeros((8, 8))
-        U[:2, :2] = U_s
-        U[2:, 2:] = U_p
+        M, N = len(self.coupled_states), len(self.uncoupled_states)
+        U = np.zeros((N, M), dtype=float)
+        # l = 0
+        U[0, 0] = CG(0, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        U[1, 1] = CG(0, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        # l = 1
+        U[2, 3] = CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
+        U[2, 6] = CG(1, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        U[3, 4] = CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
+        U[3, 7] = CG(1, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        U[4, 2] = CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
+        U[5, 3] = CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
+        U[5, 6] = CG(1, 0, 1/2, +1/2, 3/2, +1/2).doit()
+        U[6, 4] = CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
+        U[6, 7] = CG(1, 0, 1/2, -1/2, 3/2, -1/2).doit()
+        U[7, 5] = CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
         return U
-    
-    def _orbital_unitary_transform(self):
-        M = np.zeros((8, 8), dtype=complex)
 
-        # s orbitals map directly to (m_l=0) uncoupled basis:
-        # s_up -> (0, +0.5)
-        M[0, 0] = 1
-        # s_down -> (0, -0.5)
-        M[1, 1] = 1
+    def _harmonic_unitary_transform(self):
+        """
+        Transforms the 8x8 Hamiltonian from cartesian orbital/spin basis 
+        to uncoupled angular momentum basis, using Spherical Harmonics.
 
-        # p_x and p_y are linear combinations of m_l = -1 and +1
-
-        # p_x_up = (|m_l=-1> - |m_l=+1>) / sqrt(2), spin up
-        M[2, 2] = 1/np.sqrt(2)   # m_l = -1, spin up
-        M[2, 4] = -1/np.sqrt(2)  # m_l = +1, spin up
-
-        # p_x_down = (|m_l=-1> - |m_l=+1>) / sqrt(2), spin down
-        M[3, 5] = 1/np.sqrt(2)   # m_l = -1, spin down
-        M[3, 7] = -1/np.sqrt(2)  # m_l = +1, spin down
-
-        # p_y_up = i (|m_l=-1> + |m_l=+1>) / sqrt(2), spin up
-        M[4, 2] = 1j/np.sqrt(2)   # m_l = -1, spin up
-        M[4, 4] = 1j/np.sqrt(2)   # m_l = +1, spin up
-
-        # p_y_down = i (|m_l=-1> + |m_l=+1>) / sqrt(2), spin down
-        M[5, 5] = 1j/np.sqrt(2)   # m_l = -1, spin down
-        M[5, 7] = 1j/np.sqrt(2)   # m_l = +1, spin down
-
-        # p_z_up = |m_l=0>, spin up
-        M[6, 3] = 1
-
-        # p_z_down = |m_l=0>, spin down
-        M[7, 6] = 1
-        return M
+        Returns
+        -------
+        J : np.ndarray
+            The Spherical Harmonic unitary matrix. 
+        """
+        M, N = len(self.uncoupled_states), len(self.orbital_states)
+        J = np.zeros((N, M), dtype=complex)
+        inv_sqrt_2 = 1/np.sqrt(2)
+        # s-orbitals
+        J[0, 0] = 1
+        J[1, 1] = 1
+        # p-orbitals
+        J[2, 2] = -1 * inv_sqrt_2
+        J[2, 4] = 1j * inv_sqrt_2
+        J[3, 3] = -1 * inv_sqrt_2
+        J[3, 5] = 1j * inv_sqrt_2
+        J[4, 2] = 1 * inv_sqrt_2
+        J[4, 4] = 1j * inv_sqrt_2
+        J[5, 3] = 1 * inv_sqrt_2
+        J[5, 5] = 1j * inv_sqrt_2
+        J[6, 6] = 1
+        J[7, 7] = 1
+        return J
 
     def _time_reversal_operator(self):
         """
@@ -155,9 +144,9 @@ class TightBinding(Notation):
 
     def _sublattice_data(self, geometry:Geometry, location:str, idx_i:int):
         U = self.U # Clebsch-Gordan Transformation Matrix
-        M = self.M # Cartesian to Angular Momentum Unitary Transform
-        P = U @ M
-        P_dagger = M.conj().T @ U.conj().T
+        J= self.J # Cartesian to Angular Momentum Unitary Transform
+        P = U @ J
+        P_dagger = J.conj().T @ U.conj().T
         neighbour_idxs = geometry.get_neighbour_idxs(idx_i)
         dr_list_NN, _ = geometry.get_dr(location, idx_i, neighbour_idxs, type="list")
         dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx_i, neighbour_idxs, type="dict")
@@ -168,33 +157,33 @@ class TightBinding(Notation):
         t_ij_dict = {}
         for idx_j, cosines in zip(neighbour_idxs, directional_cosines_NN):
             eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
-            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = P_dagger @ H_uncoupled @ P
+            H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+            H_coupled = P @ H_cartesian @ P_dagger
             t_ij_dict[idx_j] = H_coupled
         # Spin-Orbit Coupling
         s_ij_dict = {}
         for idx_j in next_neighbour_idxs:
             eigenvalue_dict = self.spin_orbit_coupling(geometry, idx_i, idx_j)
-            H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = P_dagger @ H_uncoupled @ P
+            H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+            H_coupled = P @ H_cartesian @ P_dagger
             s_ij_dict[idx_j] = H_coupled
-        # TODO: Mean Field Decoupled Interaction
+        # Mean Field Decoupled Interaction
         u_ij_dict = {}
         eigenvalue_dict = self.mean_field_interaction(geometry, idx_i)
-        H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = U.conj().T @ H_uncoupled @ U
+        H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = P @ H_cartesian @ P_dagger
         u_ij_dict[idx_i] = self.interaction_anisotropy(geometry, idx_i, H_coupled)
         # Zeeman-Splitting
         z_ij_dict = {}
         eigenvalue_dict = self.zeeman_splitting(geometry, idx_i)
-        H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P_dagger @ H_uncoupled @ P
+        H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = P @ H_cartesian @ P_dagger
         z_ij_dict[idx_i] = H_coupled
         # Staggered Sublattice Potential
         m_ij_dict = {}
         eigenvalue_dict = self.staggered_sublattice_potential(geometry, idx_i)
-        H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P_dagger @ H_uncoupled @ P
+        H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = P @ H_cartesian @ P_dagger
         m_ij_dict[idx_i] = H_coupled
         return {
                 "idx": idx_i,
@@ -282,6 +271,7 @@ class TightBinding(Notation):
         return H
 
     def spin_orbit_coupling(self, geometry:Geometry, idx_i, idx_j):
+        # TODO: Check if there is an error for p-orbital implementation
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         so_parser = eigenvalue_parser.value["SO_coupling"][label_j]
@@ -402,11 +392,11 @@ class TightBinding(Notation):
         return eigenvalue_dict
 
     def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):
-        uncoupled_states = self.uncoupled_states
-        N = len(uncoupled_states)
+        orbital_states = self.orbital_states
+        N = len(orbital_states)
         H_uncoupled = np.zeros((N, N), dtype=complex)
-        for i, (alpha, sigma_1) in enumerate(uncoupled_states):
-            for j, (beta, sigma_2) in enumerate(uncoupled_states):
+        for i, (alpha, sigma_1) in enumerate(orbital_states):
+            for j, (beta, sigma_2) in enumerate(orbital_states):
                 outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
                 try:
                     E_ij = eigenvalue_dict[outer_product]
