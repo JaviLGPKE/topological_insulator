@@ -106,6 +106,10 @@ class TightBindingEdge(TightBinding):
             self._spin_orbit_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
+            # Mean Field Interaction
+            self._mean_field_interaction_ft(
+                row_slice, idx_i, site_dict_i, H_k
+            )
             # Staggered Sublattice Potential
             self._staggered_potential_ft(
                 row_slice, idx_i, site_dict_i, H_k
@@ -155,6 +159,12 @@ class TightBindingEdge(TightBinding):
                 bloch_phase =  np.exp(1j * k * m_ij_phase)
                 H_k_ij += bloch_phase * s_ij_phase
             H_k[row_slice, col_slice] += H_k_ij
+
+    def _mean_field_interaction_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        u_ii = site_dict_i["mean_field_interaction_dict"][idx_i]
+        H_k_ii += u_ii
+        H_k[row_slice, row_slice] += H_k_ii
 
     def _staggered_potential_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
         H_k_ii = 0

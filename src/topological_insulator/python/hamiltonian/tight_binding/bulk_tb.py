@@ -75,26 +75,27 @@ class TightBindingBulk(TightBinding):
         sublattice_dict = {geometry.label_mapper[n]: 0 for n in range(N_sites)}
         idx_i = data["idx"]
         label_i = geometry.get_label(idx_i)
-        # Diagonal: Staggered Sublattice Potential
-        m_ij = data["staggered_potential_dict"][idx_i].copy()
-        sublattice_dict[label_i] += m_ij
-        # Off-Diagonal: Electron Tunelling
+        # Electron Tunelling
         for idx_j in data["NN_idxs"]:
             label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NN"][idx_j].copy() 
             t_ij = data["hopping_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * t_ij
-        # Diagonal: Spin-Orbit Coupling
+        # Spin-Orbit Coupling
         for idx_j in data["NNN_idxs"]:
             label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NNN"][idx_j].copy()
             s_ij =  data["spin_orbit_coupling_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * s_ij
-            # if (label_i == "C") and (np.allclose(k, np.array([geometry.kx_bulk[10], geometry.ky_bulk[10]]))):
-            #     embed()
-        # Diagonal: Zeeman-Splitting
+        # Mean Field Interaction
+        u_ij = data["mean_field_interaction_dict"][idx_i].copy()
+        sublattice_dict[label_i] += u_ij
+        # Staggered Sublattice Potential
+        m_ij = data["staggered_potential_dict"][idx_i].copy()
+        sublattice_dict[label_i] += m_ij
+        # Zeeman-Splitting
         z_ij = data["zeeman_splitting_dict"][idx_i].copy()
         sublattice_dict[label_i] += z_ij
         return sublattice_dict 
