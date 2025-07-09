@@ -328,13 +328,13 @@ class TightBinding(Notation):
                 E_int += U * n_s_up * n_s_down
             elif alpha.startswith('p'):
                 E_int += U * n_p_up * n_p_down
+        sigma_x = self.pauli_matrix_dict[0]
         eigenvalue_dict = {}
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_1}|"
                     H_int = 0
-                    sigma_x = self.pauli_matrix_dict[0]
                     if alpha == "s":
                         if sigma_1 == "+":
                             H_int += U * n_s_down
