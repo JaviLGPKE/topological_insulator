@@ -40,6 +40,7 @@ class TightBinding(Notation):
         ]
         self.n_projections = len(self.uncoupled_states)
         self.U = self._coupled_unitary_transform()
+        self.M = self._orbital_unitary_transform()
         # Parity
         self.O = self._time_reversal_operator()
 
@@ -54,29 +55,69 @@ class TightBinding(Notation):
             The Clebsch-Gordan unitary matrix. 
         """
         # NOTE: follows notebook format
-        M, N = len(self.uncoupled_states), len(self.coupled_states)
-        U = np.zeros((M, N), dtype=complex)
-        # s-orbitals
-        U[0, 0] = CG(0, 0, 1/2, +1/2, 1/2, +1/2).doit()
-        U[1, 1] = CG(0, 0, 1/2, -1/2, 1/2, -1/2).doit()
-        # p-orbitals
-        U[2, 3] =  -1/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
-        U[2, 5] = 1j/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
-        U[2, 6] = CG(1, 0, 1/2, +1/2, 1/2, +1/2).doit()
-        U[3, 2] = 1/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
-        U[3, 4] = 1j/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
-        U[3, 7] = CG(1, 0, 1/2, -1/2, 1/2, -1/2).doit()
-        U[4, 2] = -1/np.sqrt(2) * CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
-        U[4, 4] = 1j/np.sqrt(2) * CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
-        U[5, 3] = -1/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
-        U[5, 5] = 1j/np.sqrt(2) * CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
-        U[5, 6] = CG(1, 0, 1/2, +1/2, 3/2, +1/2).doit()
-        U[6, 2] = 1/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
-        U[6, 4] = 1j/np.sqrt(2) * CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
-        U[6, 7] = CG(1, 0, 1/2, -1/2, 3/2, -1/2).doit()
-        U[7, 3] = 1/np.sqrt(2) * CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
-        U[7, 5] = 1j/np.sqrt(2) * CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
+        import numpy as np
+        sqrt = np.sqrt
+
+        # Identity for s-orbitals (unchanged)
+        U_s = np.eye(2)
+
+        # Corrected U_p for p-orbitals
+        U_p = np.zeros((6, 6))
+        # j=1/2, m_j=+1/2: coefficients for |m_l=0, ↑> (col1) and |m_l=+1, ↓> (col5)
+        U_p[0, 1] =  sqrt(1/3)  # |m_l=0, ↑>
+        U_p[0, 5] = -sqrt(2/3)  # |m_l=+1, ↓>
+
+        # j=1/2, m_j=-1/2: coefficients for |m_l=-1, ↑> (col0) and |m_l=0, ↓> (col4)
+        U_p[1, 0] = -sqrt(2/3)  # |m_l=-1, ↑>
+        U_p[1, 4] =  sqrt(1/3)  # |m_l=0, ↓>
+
+        # j=3/2 states (unchanged)
+        U_p[2, 2] = 1          # |m_l=+1, ↑> (j=3/2, m_j=+3/2)
+        U_p[3, 1] =  sqrt(2/3) # |m_l=0, ↑> (j=3/2, m_j=+1/2)
+        U_p[3, 5] =  sqrt(1/3) # |m_l=+1, ↓> (j=3/2, m_j=+1/2)
+        U_p[4, 0] =  sqrt(1/3) # |m_l=-1, ↑> (j=3/2, m_j=-1/2)
+        U_p[4, 4] =  sqrt(2/3) # |m_l=0, ↓> (j=3/2, m_j=-1/2)
+        U_p[5, 3] = 1          # |m_l=-1, ↓> (j=3/2, m_j=-3/2)
+
+        # Build joint U (unchanged)
+        U = np.zeros((8, 8))
+        U[:2, :2] = U_s
+        U[2:, 2:] = U_p
         return U
+    
+    def _orbital_unitary_transform(self):
+        M = np.zeros((8, 8), dtype=complex)
+
+        # s orbitals map directly to (m_l=0) uncoupled basis:
+        # s_up -> (0, +0.5)
+        M[0, 0] = 1
+        # s_down -> (0, -0.5)
+        M[1, 1] = 1
+
+        # p_x and p_y are linear combinations of m_l = -1 and +1
+
+        # p_x_up = (|m_l=-1> - |m_l=+1>) / sqrt(2), spin up
+        M[2, 2] = 1/np.sqrt(2)   # m_l = -1, spin up
+        M[2, 4] = -1/np.sqrt(2)  # m_l = +1, spin up
+
+        # p_x_down = (|m_l=-1> - |m_l=+1>) / sqrt(2), spin down
+        M[3, 5] = 1/np.sqrt(2)   # m_l = -1, spin down
+        M[3, 7] = -1/np.sqrt(2)  # m_l = +1, spin down
+
+        # p_y_up = i (|m_l=-1> + |m_l=+1>) / sqrt(2), spin up
+        M[4, 2] = 1j/np.sqrt(2)   # m_l = -1, spin up
+        M[4, 4] = 1j/np.sqrt(2)   # m_l = +1, spin up
+
+        # p_y_down = i (|m_l=-1> + |m_l=+1>) / sqrt(2), spin down
+        M[5, 5] = 1j/np.sqrt(2)   # m_l = -1, spin down
+        M[5, 7] = 1j/np.sqrt(2)   # m_l = +1, spin down
+
+        # p_z_up = |m_l=0>, spin up
+        M[6, 3] = 1
+
+        # p_z_down = |m_l=0>, spin down
+        M[7, 6] = 1
+        return M
 
     def _time_reversal_operator(self):
         """
@@ -114,6 +155,9 @@ class TightBinding(Notation):
 
     def _sublattice_data(self, geometry:Geometry, location:str, idx:int):
         U = self.U # Clebsch-Gordan Transformation Matrix
+        M = self.M # Cartesian to Angular Momentum Unitary Transform
+        P = U @ M
+        P_dagger = M.conj().T @ U.conj().T
         neighbour_idxs = geometry.get_neighbour_idxs(idx)
         dr_list_NN, _ = geometry.get_dr(location, idx, neighbour_idxs, type="list")
         dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx, neighbour_idxs, type="dict")
@@ -125,14 +169,14 @@ class TightBinding(Notation):
         for neighbour_idx, cosines in zip(neighbour_idxs, directional_cosines_NN):
             eigenvalue_dict = self.slater_koster_hoppings(geometry, idx, neighbour_idx, cosines)
             H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = U.conj().T @ H_uncoupled @ U
+            H_coupled = P_dagger @ H_uncoupled @ P
             t_ij_dict[neighbour_idx] = H_coupled
         # Spin-Orbit Coupling
         s_ij_dict = {}
         for next_neighbour_idx in next_neighbour_idxs:
             eigenvalue_dict = self.spin_orbit_coupling(geometry, idx, next_neighbour_idx)
             H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = U.conj().T @ H_uncoupled @ U
+            H_coupled = P_dagger @ H_uncoupled @ P
             s_ij_dict[next_neighbour_idx] = H_coupled
         # TODO: Mean Field Decoupled Interaction
         u_ij_dict = {}
@@ -140,13 +184,13 @@ class TightBinding(Notation):
         z_ij_dict = {}
         eigenvalue_dict = self.zeeman_splitting(geometry, idx)
         H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = U.conj().T @ H_uncoupled @ U
+        H_coupled = P_dagger @ H_uncoupled @ P
         z_ij_dict[idx] = H_coupled
         # Staggered Sublattice Potential
         m_ij_dict = {}
         eigenvalue_dict = self.staggered_sublattice_potential(geometry, idx)
         H_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = U.conj().T @ H_uncoupled @ U
+        H_coupled = P_dagger @ H_uncoupled @ P
         m_ij_dict[idx] = H_coupled
         return {
                 "idx": idx,
