@@ -12,7 +12,8 @@
             "onsite_energy":{"A":{"E_s":0, "E_p":0}},
             "nn_hopping":{"B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, 
                 "delta_heavy":0, "delta_light":0}},
-            "SO_coupling":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
+            "kane_mele_soc":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
+            "chadi_soc":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
             "interaction":{"A":{"U":0, "n_s_up": 0, "n_s_down":0, "n_p_up":0, "n_p_down":0}}
             }, "unit":"eV"
         },
@@ -20,7 +21,8 @@
             "onsite_energy":{"B":{"E_s":0, "E_p":0}},
             "nn_hopping":{"A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0,
             "delta_heavy":0, "delta_light":0}},
-            "SO_coupling":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0 }},
+            "kane_mele_soc":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0 }},
+            "chadi_soc":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
             "interaction":{"B":{"U":0, "n_s_up": 0, "n_s_down":0, "n_p_up":0, "n_p_down":0}}
             }
         }

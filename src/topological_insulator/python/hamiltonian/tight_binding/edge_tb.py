@@ -102,9 +102,13 @@ class TightBindingEdge(TightBinding):
             self._hoppings_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
-            # Spin-Orbit Coupling
-            self._spin_orbit_coupling_ft(
+            # Kane-Mele Spin-Orbit Coupling
+            self._kane_mele_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            )
+            # Chadi Spin-Orbit Coupling
+            self._chadi_coupling_ft(
+                row_slice, idx_i, site_dict_i, H_k
             )
             # Mean Field Interaction
             self._mean_field_interaction_ft(
@@ -140,7 +144,7 @@ class TightBindingEdge(TightBinding):
                 H_k_ij += bloch_phase * t_ij_phase
             H_k[row_slice, col_slice] += H_k_ij
 
-    def _spin_orbit_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
+    def _kane_mele_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
         phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
@@ -149,16 +153,22 @@ class TightBindingEdge(TightBinding):
             # Site
             if idx_j in site_dict_i["NNN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NNN"][idx_j].copy()
-                s_ij = site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
+                s_ij = site_dict_i["kane_mele_coupling_dict"][idx_j].copy()
                 bloch_phase = np.exp(1j * k * m_ij)
                 H_k_ij += bloch_phase * s_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NNN"][idx_j_phase].copy()
-                s_ij_phase = site_dict_i["spin_orbit_coupling_dict"][idx_j_phase].copy()
+                s_ij_phase = site_dict_i["kane_mele_coupling_dict"][idx_j_phase].copy()
                 bloch_phase =  np.exp(1j * k * m_ij_phase)
                 H_k_ij += bloch_phase * s_ij_phase
             H_k[row_slice, col_slice] += H_k_ij
+    
+    def _chadi_coupling_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        c_ii = site_dict_i["chadi_coupling_dict"][idx_i]
+        H_k_ii += c_ii
+        H_k[row_slice, row_slice] += H_k_ii
 
     def _mean_field_interaction_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
         H_k_ii = 0

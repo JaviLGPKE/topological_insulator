@@ -82,13 +82,16 @@ class TightBindingBulk(TightBinding):
             t_ij = data["hopping_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * t_ij
-        # Spin-Orbit Coupling
+        # Kane-Mele Spin-Orbit Coupling
         for idx_j in data["NNN_idxs"]:
             label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NNN"][idx_j].copy()
-            s_ij =  data["spin_orbit_coupling_dict"][idx_j].copy()
+            s_ij =  data["kane_mele_coupling_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * s_ij
+        # Chadi Spin-Orbit Coupling
+        c_ij = data["chadi_coupling_dict"][idx_i].copy()
+        sublattice_dict[label_i] += c_ij
         # Mean Field Interaction
         u_ij = data["mean_field_interaction_dict"][idx_i].copy()
         sublattice_dict[label_i] += u_ij

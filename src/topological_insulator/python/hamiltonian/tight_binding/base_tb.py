@@ -159,14 +159,20 @@ class TightBinding(Notation):
             eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
             H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = P @ H_cartesian @ P_dagger
-            t_ij_dict[idx_j] = H_coupled
-        # Spin-Orbit Coupling
+            t_ij_dict[idx_j] = self.hopping_anisotropy(geometry, idx_i, idx_j, H_coupled)
+        # Kane-Mele Spin-Orbit Coupling
         s_ij_dict = {}
         for idx_j in next_neighbour_idxs:
-            eigenvalue_dict = self.spin_orbit_coupling(geometry, idx_i, idx_j)
+            eigenvalue_dict = self.kane_mele_coupling(geometry, idx_i, idx_j)
             H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = P @ H_cartesian @ P_dagger
             s_ij_dict[idx_j] = H_coupled
+        # Chaid Spin-Orbit Coupling
+        c_ij_dict = {}
+        eigenvalue_dict = self.chadi_coupling(geometry, idx_i)
+        H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
+        H_coupled = P @ H_cartesian @ P_dagger
+        c_ij_dict[idx_i] = H_coupled
         # Mean Field Decoupled Interaction
         u_ij_dict = {}
         eigenvalue_dict = self.mean_field_interaction(geometry, idx_i)
@@ -194,13 +200,14 @@ class TightBinding(Notation):
                 "dr_dict_NNN": dr_dict_NNN,
                 "dm_dict_NNN": dm_dict_NNN,
                 "hopping_dict": t_ij_dict,
-                "spin_orbit_coupling_dict": s_ij_dict,
+                "kane_mele_coupling_dict": s_ij_dict,
+                "chadi_coupling_dict": c_ij_dict,
                 "mean_field_interaction_dict": u_ij_dict,
                 "zeeman_splitting_dict": z_ij_dict,
                 "staggered_potential_dict": m_ij_dict     
         }
 
-    def slater_koster_hoppings(self, geometry, idx_i, idx_j, cosines):
+    def slater_koster_hoppings(self, geometry:Geometry, idx_i, idx_j, cosines):
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
@@ -252,14 +259,12 @@ class TightBinding(Notation):
                             eigenvalue_dict[outer_product] = H_t if sigma_1 == sigma_2 else 0
         return eigenvalue_dict
 
-    def hopping_anisotropy(self, geometry, idx_i, idx_j, H):
+    def hopping_anisotropy(self, geometry:Geometry, idx_i, idx_j, H):
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
         d_heavy = nn_parser["delta_heavy"]
         d_light = nn_parser["delta_light"]
-        if d_heavy == d_light == 0:
-            return H
         for i, (j, m_j) in enumerate(self.coupled_states):
             for n, (k, m_k) in enumerate(self.coupled_states):
                 if j != 3/2 or k != 3/2:
@@ -270,11 +275,11 @@ class TightBinding(Notation):
                     H[i, n] -= d_light
         return H
 
-    def spin_orbit_coupling(self, geometry:Geometry, idx_i, idx_j):
-        # TODO: Check if there is an error for p-orbital implementation
+    def kane_mele_coupling(self, geometry:Geometry, idx_i, idx_j):
+        # FIXME: Check if there is an error for p-orbital implementation
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
-        so_parser = eigenvalue_parser.value["SO_coupling"][label_j]
+        so_parser = eigenvalue_parser.value["kane_mele_soc"][label_j]
         lambda_ss = so_parser["lambda_ss"]
         lambda_sp = so_parser["lambda_sp"]
         lambda_pp = so_parser["lambda_pp"]
@@ -290,17 +295,44 @@ class TightBinding(Notation):
                         if alpha == "s" and beta == "s":
                             # NOTE: <s|L·S|s> = 0
                             pauli_matrix = self.pauli_matrix_dict[2]
-                            H_so += 1j * lambda_ss * pauli_matrix[n, m]
+                            H_so += 1j * lambda_ss *  v_ij * pauli_matrix[n, m]
                         # s-p or p-s Kane coupling
                         elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
-                            p_orb = alpha if alpha.startswith('p') else beta
-                            d = self.direction_index[p_orb.split('_')[1]]
-                            pauli_matrix = self.pauli_matrix_dict[d]
-                            H_so += 1j * lambda_sp * pauli_matrix[n, m]
-                            #NOTE: s are symmetric, p orbitals are antisymmetric -> Under spatial inversion:
-                            # s(-r) = s(r) and p(-r) = -p(r), hence <s|H|x> = -<x|H|s>
-                            if outer_product[1] != "s":
-                                H_so *= -1
+                            # p_orb = alpha if alpha.startswith('p') else beta
+                            # d = self.direction_index[p_orb.split('_')[1]]
+                            # pauli_matrix = self.pauli_matrix_dict[d]
+                            # H_so += 1j * lambda_sp * v_ij * pauli_matrix[n, m]
+                            # #NOTE: s are symmetric, p orbitals are antisymmetric -> Under spatial inversion:
+                            # # s(-r) = s(r) and p(-r) = -p(r), hence <s|H|x> = -<x|H|s>
+                            # if outer_product[1] != "s":
+                            #     H_so *= -1
+                            pass
+                        # p-p Chadi coupling
+                        elif alpha.startswith('p') and beta.startswith('p'):
+                            pass
+                        else: 
+                            raise ValueError(f"Not Implemented!")
+                        eigenvalue_dict[outer_product] = H_so
+        return eigenvalue_dict
+
+    def chadi_coupling(self, geometry:Geometry, idx_i):
+        label_i = geometry.get_label(idx_i)
+        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+        so_parser = eigenvalue_parser.value["chadi_soc"][label_i]
+        lambda_ss = so_parser["lambda_ss"]
+        lambda_sp = so_parser["lambda_sp"]
+        lambda_pp = so_parser["lambda_pp"]
+        eigenvalue_dict = {}
+        for n, sigma_1 in enumerate(self.spin_dict.values()):
+            for m, sigma_2 in enumerate(self.spin_dict.values()):
+                for alpha in self.orbitals:
+                    for beta in self.orbitals:
+                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        H_so = 0
+                        if alpha == "s" and beta == "s":
+                            pass
+                        elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
+                            pass
                         # p-p Chadi coupling
                         elif alpha.startswith('p') and beta.startswith('p'):
                             i = self.direction_index[alpha.split('_')[1]]
@@ -311,7 +343,7 @@ class TightBinding(Notation):
                             H_so += 1j * lambda_pp * eps_ijk * sigma_k[n, m]
                         else: 
                             raise ValueError(f"Not Implemented!")
-                        eigenvalue_dict[outer_product] = v_ij * H_so
+                        eigenvalue_dict[outer_product] = H_so
         return eigenvalue_dict
 
     def mean_field_interaction(self, geometry:Geometry, idx_i):
@@ -335,17 +367,23 @@ class TightBinding(Notation):
                 for alpha in self.orbitals:
                     outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_1}|"
                     H_int = 0
+                    if sigma_1 != sigma_2:
+                        continue
                     if alpha == "s":
                         if sigma_1 == "+":
-                            H_int += U * n_s_down
+                            H_int += U * n_p_down
+                        elif sigma_1 == "-":
+                            H_int += U * n_p_up
                         else:
-                            H_int += U * n_s_up
+                            ValueError("help")
                     elif alpha.startswith('p'):
                         if sigma_1 == "+":
                             H_int += U * n_p_down
-                        else:
+                        elif sigma_1 == "-":
                             H_int += U * n_p_up
-                    eigenvalue_dict[outer_product] = (H_int * sigma_x[n, m]) - E_int
+                        else:
+                            ValueError("help")
+                    eigenvalue_dict[outer_product] = (H_int) - E_int
         return eigenvalue_dict
     
     def interaction_anisotropy(self, geometry:Geometry, idx_i, H_coupled):
