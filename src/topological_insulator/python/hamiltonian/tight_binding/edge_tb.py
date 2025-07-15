@@ -1,8 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
-from collections import defaultdict
-from scipy import linalg
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -82,6 +80,7 @@ class TightBindingEdge(TightBinding):
                 E_k_dict[key] = E_k # Eigenvalues
                 U_k_dict[key] = U_k # Eigenstates
             self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
+            self.H_k_dict = H_k
         else:
             ValueError("Only 'real' and 'reciprocal' problems considered")
         print(f"'Edge' Eigenvalues - Done!")
@@ -188,7 +187,7 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
-    def plot_dispersion(self, geometry: Geometry, legend: bool = False, hide: bool = True) -> None:
+    def plot_dispersion(self, geometry: Geometry, bands:list = [], legend: bool = False, hide: bool = True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
         k_vals_sorted = k_vals
         E_list = []
@@ -197,11 +196,13 @@ class TightBindingEdge(TightBinding):
             E_list.append(E_k)
         E_list = np.array(E_list)
         plt.figure(figsize=(10, 8))
-        num_bands = E_list.shape[1]
-        colormap = plt.cm.get_cmap('viridis', num_bands)
-        band_colors = [colormap(i) for i in range(num_bands)]
+        N_bands = E_list.shape[1]
+        colormap = plt.cm.get_cmap('viridis', N_bands)
+        band_colors = [colormap(i) for i in range(N_bands)]
         
-        for band in range(num_bands):
+        if bands == []:
+            bands = range(N_bands)
+        for band in bands:
             E = E_list[:, band]
             if np.allclose(E, 0, rtol=1e-6) and hide:
                 # Ignore zero values

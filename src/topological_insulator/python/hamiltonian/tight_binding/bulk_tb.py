@@ -134,30 +134,28 @@ class TightBindingBulk(TightBinding):
         plt.title('Bulk Band Structure', fontsize=14)
         plt.show()
 
-    def plot_band_structure(self, geometry:Geometry, hide:bool=True):
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
         """
         Plot band-structure along G → K → M → K' → G
         in a hexagonal BZ, automatically computing the
         reciprocal vectors from geometry.a1, geometry.a2.
         """
-        Nk_per_segment = geometry.N_k * 30
+        Nk_per_segment = geometry.N_k 
         b1, b2 = geometry.b1, geometry.b2
         Gamma = (0.0, 0.0)
-        K     = ((b1 + b2)/3).tolist()
-        Kp    = ((2*b1 + b2)/3).tolist()
         M     = (0.5*b1).tolist()
+        K   = ((2*b1 + b2)/3).tolist()
         path = [
         ("G",  Gamma),
-        ("K",  K),
         ("M",  M),
-        ("K'", Kp),
+        ("K", K),
         ("G",  Gamma),
         ]
         kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx_grid), len(ky_grid)
         first_key = next(iter(self.E_k_dict))
-        n_bands   = self.E_k_dict[first_key].shape[0]
-        E_3d = np.zeros((n_kx, n_ky, n_bands))
+        N_bands   = self.E_k_dict[first_key].shape[0]
+        E_3d = np.zeros((n_kx, n_ky, N_bands))
         for ix, kx in enumerate(kx_grid):
             for iy, ky in enumerate(ky_grid):
                 key = f"[{kx},{ky}]"
@@ -196,15 +194,15 @@ class TightBindingBulk(TightBinding):
         # 4) Plot
         fig, ax = plt.subplots(figsize=(8, 5))
         colormap = plt.cm.viridis  # Choose colormap (e.g., 'viridis', 'plasma', 'Spectral')
-        band_colors = colormap(np.linspace(0, 1, n_bands))  # Distribute colors evenly across bands
-        
-        for band in range(n_bands):
+        band_colors = colormap(np.linspace(0, 1, N_bands))  # Distribute colors evenly across bands
+        if bands == []:
+            bands = range(N_bands)
+        for band in bands:
             band_energies = E_path[:, band]
             if not np.all(np.abs(band_energies) < 1e-8) and hide:
                 ax.plot(dist, band_energies, 
                         lw=1.5, 
                         color=band_colors[band])  # Assign color by band index
-        
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels)
         ax.set_xlim(dist[0], dist[-1])
