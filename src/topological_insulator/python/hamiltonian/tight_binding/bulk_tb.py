@@ -56,7 +56,7 @@ class TightBindingBulk(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
-        N_projections = self.n_projections
+        N_projections = len(self.coupled_states)
         N_sites = len(self.sublattice_idxs)
         N = N_sites * N_projections
         H_k = np.zeros(shape=(N, N), dtype=complex)
@@ -194,12 +194,17 @@ class TightBindingBulk(TightBinding):
         E_path = np.array([E_3d[ix, iy, :] for (ix, iy) in indices])
         dist = dist[:len(kpoints)]
         # 4) Plot
-        fig, ax = plt.subplots(figsize=(8,5))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        colormap = plt.cm.viridis  # Choose colormap (e.g., 'viridis', 'plasma', 'Spectral')
+        band_colors = colormap(np.linspace(0, 1, n_bands))  # Distribute colors evenly across bands
+        
         for band in range(n_bands):
             band_energies = E_path[:, band]
-            if not np.all(np.abs(band_energies) < 1e-8 ) and hide:
-                # Ignore zero values
-                ax.plot(dist, band_energies, lw=1.5)
+            if not np.all(np.abs(band_energies) < 1e-8) and hide:
+                ax.plot(dist, band_energies, 
+                        lw=1.5, 
+                        color=band_colors[band])  # Assign color by band index
+        
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels)
         ax.set_xlim(dist[0], dist[-1])

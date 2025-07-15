@@ -44,7 +44,6 @@ class TightBinding(Notation):
             (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
             (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
         ]
-        self.n_projections = len(self.uncoupled_states)
         self.U = self._coupled_unitary_transform()
         self.J = self._harmonic_unitary_transform()
         # Parity
@@ -267,12 +266,13 @@ class TightBinding(Notation):
         d_light = nn_parser["delta_light"]
         for i, (j, m_j) in enumerate(self.coupled_states):
             for n, (k, m_k) in enumerate(self.coupled_states):
-                if j != 3/2 or k != 3/2:
-                    continue
-                if abs(m_j) == abs(m_k) == 3/2:
-                    H[i, n] += d_heavy
-                else:
-                    H[i, n] -= d_light
+                if j == 3/2 and k == 3/2:
+                    if abs(m_j) == 3/2 and abs(m_k) == 3/2:
+                        H[i, n] += d_heavy
+                    elif abs(m_j) == 1/2 and abs(m_k) == 1/2:
+                        H[i, n] -= d_light
+                    else: 
+                        continue
         return H
 
     def kane_mele_coupling(self, geometry:Geometry, idx_i, idx_j):

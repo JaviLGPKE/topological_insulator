@@ -88,7 +88,7 @@ class TightBindingEdge(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
-        N_projections = self.n_projections
+        N_projections = len(self.coupled_states)
         N_sites = len(self.sublattice_idxs)
         N = N_sites * N_projections
         H_k = np.zeros(shape=(N, N), dtype=complex)
@@ -188,7 +188,7 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
-    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:
+    def plot_dispersion(self, geometry: Geometry, legend: bool = False, hide: bool = True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
         k_vals_sorted = k_vals
         E_list = []
@@ -198,12 +198,17 @@ class TightBindingEdge(TightBinding):
         E_list = np.array(E_list)
         plt.figure(figsize=(10, 8))
         num_bands = E_list.shape[1]
+        colormap = plt.cm.get_cmap('viridis', num_bands)
+        band_colors = [colormap(i) for i in range(num_bands)]
+        
         for band in range(num_bands):
             E = E_list[:, band]
             if np.allclose(E, 0, rtol=1e-6) and hide:
                 # Ignore zero values
                 continue 
-            plt.plot(k_vals_sorted, E, label=f"Band {band}")
+            plt.plot(k_vals_sorted, E, 
+                    color=band_colors[band], 
+                    label=f"Band {band}")
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy")
         plt.title("Edge Band Structure")
