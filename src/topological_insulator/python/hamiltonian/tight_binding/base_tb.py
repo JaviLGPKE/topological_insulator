@@ -123,10 +123,13 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_2}|"
-                    eigenvalue_dict[outer_product] = 1j * S_y[n, m]
+                    eigenvalue_dict[outer_product] = -1j * S_y[n, m]
         O_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        U = self.U
-        O_coupled = U.conj().T @ O_uncoupled @ U.conj()
+        C = self.C
+        T = self.T
+        P = C @ T
+        P_dagger = T.conj().T @ C.conj().T
+        O_coupled = P @ O_uncoupled @ P_dagger.conj()
         O_sublattice = np.identity(n=len(self.delta_vectors))
         O = np.kron(O_sublattice, O_coupled)
         return O
