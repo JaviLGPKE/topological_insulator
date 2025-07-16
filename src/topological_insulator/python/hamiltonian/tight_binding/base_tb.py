@@ -44,8 +44,8 @@ class TightBinding(Notation):
             (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
             (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
         ]
-        self.U = self._coupled_unitary_transform()
-        self.J = self._harmonic_unitary_transform()
+        self.C = self._coupled_unitary_transform()
+        self.T = self._harmonic_unitary_transform()
         # Parity
         self.O = self._time_reversal_operator()
 
@@ -61,22 +61,22 @@ class TightBinding(Notation):
         """
         # NOTE: follows notebook format
         M, N = len(self.coupled_states), len(self.uncoupled_states)
-        U = np.zeros((N, M), dtype=float)
+        C = np.zeros((N, M), dtype=float)
         # l = 0
-        U[0, 0] = CG(0, 0, 1/2, +1/2, 1/2, +1/2).doit()
-        U[1, 1] = CG(0, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        C[0, 0] = CG(0, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        C[1, 1] = CG(0, 0, 1/2, -1/2, 1/2, -1/2).doit()
         # l = 1
-        U[2, 3] = CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
-        U[2, 6] = CG(1, 0, 1/2, +1/2, 1/2, +1/2).doit()
-        U[3, 4] = CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
-        U[3, 7] = CG(1, 0, 1/2, -1/2, 1/2, -1/2).doit()
-        U[4, 2] = CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
-        U[5, 3] = CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
-        U[5, 6] = CG(1, 0, 1/2, +1/2, 3/2, +1/2).doit()
-        U[6, 4] = CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
-        U[6, 7] = CG(1, 0, 1/2, -1/2, 3/2, -1/2).doit()
-        U[7, 5] = CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
-        return U
+        C[2, 3] = CG(1, +1, 1/2, -1/2, 1/2, +1/2).doit()
+        C[2, 6] = CG(1, 0, 1/2, +1/2, 1/2, +1/2).doit()
+        C[3, 4] = CG(1, -1, 1/2, +1/2, 1/2, -1/2).doit()
+        C[3, 7] = CG(1, 0, 1/2, -1/2, 1/2, -1/2).doit()
+        C[4, 2] = CG(1, +1, 1/2, +1/2, 3/2, +3/2).doit()
+        C[5, 3] = CG(1, +1, 1/2, -1/2, 3/2, +1/2).doit()
+        C[5, 6] = CG(1, 0, 1/2, +1/2, 3/2, +1/2).doit()
+        C[6, 4] = CG(1, -1, 1/2, +1/2, 3/2, -1/2).doit()
+        C[6, 7] = CG(1, 0, 1/2, -1/2, 3/2, -1/2).doit()
+        C[7, 5] = CG(1, -1, 1/2, -1/2, 3/2, -3/2).doit()
+        return C
 
     def _harmonic_unitary_transform(self):
         """
@@ -89,23 +89,23 @@ class TightBinding(Notation):
             The Spherical Harmonic unitary matrix. 
         """
         M, N = len(self.uncoupled_states), len(self.orbital_states)
-        J = np.zeros((N, M), dtype=complex)
+        T = np.zeros((N, M), dtype=complex)
         inv_sqrt_2 = 1/np.sqrt(2)
         # s-orbitals
-        J[0, 0] = 1
-        J[1, 1] = 1
+        T[0, 0] = 1
+        T[1, 1] = 1
         # p-orbitals
-        J[2, 2] = -1 * inv_sqrt_2
-        J[2, 4] = 1j * inv_sqrt_2
-        J[3, 3] = -1 * inv_sqrt_2
-        J[3, 5] = 1j * inv_sqrt_2
-        J[4, 2] = 1 * inv_sqrt_2
-        J[4, 4] = 1j * inv_sqrt_2
-        J[5, 3] = 1 * inv_sqrt_2
-        J[5, 5] = 1j * inv_sqrt_2
-        J[6, 6] = 1
-        J[7, 7] = 1
-        return J
+        T[2, 2] = -1 * inv_sqrt_2
+        T[2, 4] = 1j * inv_sqrt_2
+        T[3, 3] = -1 * inv_sqrt_2
+        T[3, 5] = 1j * inv_sqrt_2
+        T[4, 2] = 1 * inv_sqrt_2
+        T[4, 4] = 1j * inv_sqrt_2
+        T[5, 3] = 1 * inv_sqrt_2
+        T[5, 5] = 1j * inv_sqrt_2
+        T[6, 6] = 1
+        T[7, 7] = 1
+        return T
 
     def _time_reversal_operator(self):
         """
@@ -142,10 +142,10 @@ class TightBinding(Notation):
         raise NotImplementedError("'build_hamiltonian' method not implemented!")
 
     def _sublattice_data(self, geometry:Geometry, location:str, idx_i:int):
-        U = self.U # Clebsch-Gordan Transformation Matrix
-        J= self.J # Cartesian to Angular Momentum Unitary Transform
-        P = U @ J
-        P_dagger = J.conj().T @ U.conj().T
+        C = self.C # Clebsch-Gordan Transformation Matrix
+        T = self.T # Cartesian to Angular Momentum Unitary Transform
+        P = C @ T
+        P_dagger = T.conj().T @ C.conj().T
         neighbour_idxs = geometry.get_neighbour_idxs(idx_i)
         dr_list_NN, _ = geometry.get_dr(location, idx_i, neighbour_idxs, type="list")
         dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx_i, neighbour_idxs, type="dict")
