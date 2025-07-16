@@ -1,8 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
-from collections import defaultdict
-from scipy import linalg
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -82,13 +80,14 @@ class TightBindingEdge(TightBinding):
                 E_k_dict[key] = E_k # Eigenvalues
                 U_k_dict[key] = U_k # Eigenstates
             self.E_k_dict, self.U_k_dict = E_k_dict, U_k_dict
+            self.H_k_dict = H_k
         else:
             ValueError("Only 'real' and 'reciprocal' problems considered")
         print(f"'Edge' Eigenvalues - Done!")
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: int) -> np.ndarray:
-        N_projections = self.n_projections
+        N_projections = len(self.coupled_states)
         N_sites = len(self.sublattice_idxs)
         N = N_sites * N_projections
         H_k = np.zeros(shape=(N, N), dtype=complex)
@@ -102,9 +101,17 @@ class TightBindingEdge(TightBinding):
             self._hoppings_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
-            # Spin-Orbit Coupling
-            self._spin_orbit_coupling_ft(
+            # Kane-Mele Spin-Orbit Coupling
+            self._kane_mele_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
+            )
+            # Chadi Spin-Orbit Coupling
+            self._chadi_coupling_ft(
+                row_slice, idx_i, site_dict_i, H_k
+            )
+            # Mean Field Interaction
+            self._mean_field_interaction_ft(
+                row_slice, idx_i, site_dict_i, H_k
             )
             # Staggered Sublattice Potential
             self._staggered_potential_ft(
@@ -136,7 +143,7 @@ class TightBindingEdge(TightBinding):
                 H_k_ij += bloch_phase * t_ij_phase
             H_k[row_slice, col_slice] += H_k_ij
 
-    def _spin_orbit_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
+    def _kane_mele_coupling_ft(self, geometry:Geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k:np.ndarray, k):
         phase_dict = geometry.get_phase_idxs(idx_i, site_dict_i["dm_dict_NNN"], self.sublattice_idxs)
         for idx_j, idx_j_phase in phase_dict.items():
             j = idx_map[idx_j]
@@ -145,16 +152,28 @@ class TightBindingEdge(TightBinding):
             # Site
             if idx_j in site_dict_i["NNN_idxs"]:
                 m_ij = site_dict_i["dm_dict_NNN"][idx_j].copy()
-                s_ij = site_dict_i["spin_orbit_coupling_dict"][idx_j].copy()
+                s_ij = site_dict_i["kane_mele_coupling_dict"][idx_j].copy()
                 bloch_phase = np.exp(1j * k * m_ij)
                 H_k_ij += bloch_phase * s_ij
             # Phase
             if idx_j_phase is not None:
                 m_ij_phase = site_dict_i["dm_dict_NNN"][idx_j_phase].copy()
-                s_ij_phase = site_dict_i["spin_orbit_coupling_dict"][idx_j_phase].copy()
+                s_ij_phase = site_dict_i["kane_mele_coupling_dict"][idx_j_phase].copy()
                 bloch_phase =  np.exp(1j * k * m_ij_phase)
                 H_k_ij += bloch_phase * s_ij_phase
             H_k[row_slice, col_slice] += H_k_ij
+    
+    def _chadi_coupling_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        c_ii = site_dict_i["chadi_coupling_dict"][idx_i]
+        H_k_ii += c_ii
+        H_k[row_slice, row_slice] += H_k_ii
+
+    def _mean_field_interaction_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
+        H_k_ii = 0
+        u_ii = site_dict_i["mean_field_interaction_dict"][idx_i]
+        H_k_ii += u_ii
+        H_k[row_slice, row_slice] += H_k_ii
 
     def _staggered_potential_ft(self, row_slice, idx_i, site_dict_i, H_k:np.ndarray):
         H_k_ii = 0
@@ -168,7 +187,7 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
-    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True) -> None:
+    def plot_dispersion(self, geometry: Geometry, bands:list = [], legend: bool = False, hide: bool = True) -> None:
         k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
         k_vals_sorted = k_vals
         E_list = []
@@ -177,13 +196,20 @@ class TightBindingEdge(TightBinding):
             E_list.append(E_k)
         E_list = np.array(E_list)
         plt.figure(figsize=(10, 8))
-        num_bands = E_list.shape[1]
-        for band in range(num_bands):
+        N_bands = E_list.shape[1]
+        colormap = plt.cm.get_cmap('viridis', N_bands)
+        band_colors = [colormap(i) for i in range(N_bands)]
+        
+        if bands == []:
+            bands = range(N_bands)
+        for band in bands:
             E = E_list[:, band]
             if np.allclose(E, 0, rtol=1e-6) and hide:
                 # Ignore zero values
                 continue 
-            plt.plot(k_vals_sorted, E, label=f"Band {band}")
+            plt.plot(k_vals_sorted, E, 
+                    color=band_colors[band], 
+                    label=f"Band {band}")
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy")
         plt.title("Edge Band Structure")

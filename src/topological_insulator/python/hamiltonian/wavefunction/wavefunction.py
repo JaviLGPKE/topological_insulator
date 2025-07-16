@@ -45,7 +45,7 @@ class WaveFunction(Notation):
         else:
             return self.Z2_invariant()
 
-    def Z2_invariant(self):
+    def Z2_invariant(self, E_f = 0, filling_factor=1):
         # NOTE: TR invariant is ill defined for gapless dispersions.
         g, tb = self.geometry, self.tight_binding
         O = tb.O # Time-Reversal Operator

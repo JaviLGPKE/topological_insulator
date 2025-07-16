@@ -56,7 +56,7 @@ class TightBindingBulk(TightBinding):
         return perf_counter() - start
 
     def _fourier_transform(self, geometry:Geometry, k: np.ndarray) -> np.ndarray:
-        N_projections = self.n_projections
+        N_projections = len(self.coupled_states)
         N_sites = len(self.sublattice_idxs)
         N = N_sites * N_projections
         H_k = np.zeros(shape=(N, N), dtype=complex)
@@ -75,26 +75,30 @@ class TightBindingBulk(TightBinding):
         sublattice_dict = {geometry.label_mapper[n]: 0 for n in range(N_sites)}
         idx_i = data["idx"]
         label_i = geometry.get_label(idx_i)
-        # Diagonal: Staggered Sublattice Potential
-        m_ij = data["staggered_potential_dict"][idx_i].copy()
-        sublattice_dict[label_i] += m_ij
-        # Off-Diagonal: Electron Tunelling
+        # Electron Tunelling
         for idx_j in data["NN_idxs"]:
             label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NN"][idx_j].copy() 
             t_ij = data["hopping_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * t_ij
-        # Diagonal: Spin-Orbit Coupling
+        # Kane-Mele Spin-Orbit Coupling
         for idx_j in data["NNN_idxs"]:
             label_j = geometry.get_label(idx_j)
             r_ij = data["dr_dict_NNN"][idx_j].copy()
-            s_ij =  data["spin_orbit_coupling_dict"][idx_j].copy()
+            s_ij =  data["kane_mele_coupling_dict"][idx_j].copy()
             bloch_phase = np.exp(1j * np.dot(k, r_ij))
             sublattice_dict[label_j] += bloch_phase * s_ij
-            # if (label_i == "C") and (np.allclose(k, np.array([geometry.kx_bulk[10], geometry.ky_bulk[10]]))):
-            #     embed()
-        # Diagonal: Zeeman-Splitting
+        # Chadi Spin-Orbit Coupling
+        c_ij = data["chadi_coupling_dict"][idx_i].copy()
+        sublattice_dict[label_i] += c_ij
+        # Mean Field Interaction
+        u_ij = data["mean_field_interaction_dict"][idx_i].copy()
+        sublattice_dict[label_i] += u_ij
+        # Staggered Sublattice Potential
+        m_ij = data["staggered_potential_dict"][idx_i].copy()
+        sublattice_dict[label_i] += m_ij
+        # Zeeman-Splitting
         z_ij = data["zeeman_splitting_dict"][idx_i].copy()
         sublattice_dict[label_i] += z_ij
         return sublattice_dict 
@@ -130,30 +134,28 @@ class TightBindingBulk(TightBinding):
         plt.title('Bulk Band Structure', fontsize=14)
         plt.show()
 
-    def plot_band_structure(self, geometry:Geometry, hide:bool=True):
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
         """
         Plot band-structure along G → K → M → K' → G
         in a hexagonal BZ, automatically computing the
         reciprocal vectors from geometry.a1, geometry.a2.
         """
-        Nk_per_segment = geometry.N_k * 30
+        Nk_per_segment = geometry.N_k 
         b1, b2 = geometry.b1, geometry.b2
         Gamma = (0.0, 0.0)
-        K     = ((b1 + b2)/3).tolist()
-        Kp    = ((2*b1 + b2)/3).tolist()
         M     = (0.5*b1).tolist()
+        K   = ((2*b1 + b2)/3).tolist()
         path = [
         ("G",  Gamma),
-        ("K",  K),
         ("M",  M),
-        ("K'", Kp),
+        ("K", K),
         ("G",  Gamma),
         ]
         kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx_grid), len(ky_grid)
         first_key = next(iter(self.E_k_dict))
-        n_bands   = self.E_k_dict[first_key].shape[0]
-        E_3d = np.zeros((n_kx, n_ky, n_bands))
+        N_bands   = self.E_k_dict[first_key].shape[0]
+        E_3d = np.zeros((n_kx, n_ky, N_bands))
         for ix, kx in enumerate(kx_grid):
             for iy, ky in enumerate(ky_grid):
                 key = f"[{kx},{ky}]"
@@ -190,12 +192,17 @@ class TightBindingBulk(TightBinding):
         E_path = np.array([E_3d[ix, iy, :] for (ix, iy) in indices])
         dist = dist[:len(kpoints)]
         # 4) Plot
-        fig, ax = plt.subplots(figsize=(8,5))
-        for band in range(n_bands):
+        fig, ax = plt.subplots(figsize=(8, 5))
+        colormap = plt.cm.viridis  # Choose colormap (e.g., 'viridis', 'plasma', 'Spectral')
+        band_colors = colormap(np.linspace(0, 1, N_bands))  # Distribute colors evenly across bands
+        if bands == []:
+            bands = range(N_bands)
+        for band in bands:
             band_energies = E_path[:, band]
-            if not np.all(np.abs(band_energies) < 1e-8 ) and hide:
-                # Ignore zero values
-                ax.plot(dist, band_energies, lw=1.5)
+            if not np.all(np.abs(band_energies) < 1e-8) and hide:
+                ax.plot(dist, band_energies, 
+                        lw=1.5, 
+                        color=band_colors[band])  # Assign color by band index
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels)
         ax.set_xlim(dist[0], dist[-1])
