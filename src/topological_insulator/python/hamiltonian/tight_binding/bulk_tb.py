@@ -41,7 +41,7 @@ class TightBindingBulk(TightBinding):
             H_k_dict, E_k_dict, U_k_dict = {}, {}, {}
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
-                    key = f"[{k_x},{k_y}]"
+                    key = f"[{k_x}, {k_y}]"
                     k = np.array([k_x, k_y])
                     H_k = self._fourier_transform(geometry, k)
                     E_k, U_k = self._solve_eigenvalues(H_k)
@@ -109,7 +109,7 @@ class TightBindingBulk(TightBinding):
         E_k_list = []
         for k_x in kx:
             for k_y in ky:
-                key = f"[{k_x},{k_y}]"
+                key = f"[{k_x}, {k_y}]"
                 E_k_list.append(self.E_k_dict[key])
         E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
         E_3d = E_stacked.reshape(n_kx, n_ky, -1)
@@ -158,7 +158,7 @@ class TightBindingBulk(TightBinding):
         E_3d = np.zeros((n_kx, n_ky, N_bands))
         for ix, kx in enumerate(kx_grid):
             for iy, ky in enumerate(ky_grid):
-                key = f"[{kx},{ky}]"
+                key = f"[{kx}, {ky}]"
                 E_3d[ix, iy, :] = self.E_k_dict[key]
         # 1) Build the high‐symmetry k‐path + cumulative distance
         kpoints = []

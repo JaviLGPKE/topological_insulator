@@ -1,7 +1,7 @@
 from .model_options import ModelOptions
 from .cell_parser import CellParser
 from .geometry import Geometry
-from .hamiltonian import (TightBinding, TightBindingBulk, TightBindingEdge, WaveFunction)
+from .hamiltonian import (TightBinding, TightBindingBulk, TightBindingEdge, TopologicalInvariants)
 
 class Problem:
     def __init__(self, data_path:str, file_name:str, save_path=None):
@@ -10,11 +10,11 @@ class Problem:
         self.hamiltonian = {
             "bulk": {
                 "tight_binding": None,
-                "wavefunction": None
+                "topological_invariants": None
             },
             "edge": {
                 "tight_binding": None,
-                "wavefunction": None
+                "topological_invariants": None
             }
         }
     
@@ -47,18 +47,18 @@ class Problem:
             # Tight-Binding
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.solve_eigenvalues(self.geometry, H_type)
-            # Wavefunction
-            wavefunction = WaveFunction(
+            # invariants
+            invariants = TopologicalInvariants(
                 model_options=self.model_options, cell_parser=self.cell_parser, 
                 geometry=self.geometry, tight_binding = tight_binding
             )
-            self.hamiltonian[key]["wavefunction"] = wavefunction
+            self.hamiltonian[key]["topological_invariants"] = invariants
     
     def get_topological_invariant(self, band = 0, tol= 1e-6):
         location = self.model_options.location
         assert(location in ["both", "bulk"])
-        wavefunction: WaveFunction = self.hamiltonian["bulk"]["wavefunction"]
-        return wavefunction.get_topological_invariant(band, tol)
+        invariants: TopologicalInvariants = self.hamiltonian["bulk"]["topological_invariants"]
+        return invariants.get_topological_invariant(band, tol)
 
     def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, F=None):
         if plot_type == "lattice":
@@ -71,6 +71,6 @@ class Problem:
             tight_binding:TightBinding = self.hamiltonian[location]["tight_binding"]
             tight_binding.plot_band_structure(self.geometry, hide=hide)
         elif plot_type in ["berry_flux", "berry_curvature"]:
-            wavefunction:WaveFunction = self.hamiltonian[location]["wavefunction"]
-            wavefunction.plot_berry_flux(F)
+            invariants:TopologicalInvariants = self.hamiltonian[location]["topological_invariants"]
+            invariants.plot_berry_flux(F)
             

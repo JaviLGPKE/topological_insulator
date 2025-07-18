@@ -11,7 +11,7 @@ from ..tight_binding.bulk_tb import TightBinding
 
 from IPython import embed
 
-class WaveFunction(Notation):
+class TopologicalInvariants(Notation):
     def __init__(self, model_options:ModelOptions, cell_parser:CellParser, 
                  geometry:Geometry, tight_binding:TightBinding):
         super().__init__()
@@ -20,7 +20,21 @@ class WaveFunction(Notation):
         self.cell_parser = cell_parser
         self.geometry = geometry
         self.tight_binding = tight_binding
-        # Parity
+        # Band Gap
+        self._calculate_bandgap()
+    
+    def _calculate_bandgap(self):
+        g, tb = self.geometry, self.tight_binding
+        K_point = g.K_point
+        E_k = tb.E_k_dict[f"{K_point}"]
+        N  = len(E_k)
+        N_occ = N // 2 
+        VBM0 = E_k[N_occ-1]
+        CBM0 = E_k[N_occ]
+        mu = self.mu = 0.5*(VBM0 + CBM0)
+        VBM = E_k[E_k < mu]
+        CBM = E_k[E_k > mu]
+        self.dE = CBM.min() - VBM.max()
 
     def get_zak_phase(self, band = 1):
         assert(self.model_options.location in ["both", "edge"])
@@ -45,7 +59,10 @@ class WaveFunction(Notation):
         else:
             return self.Z2_invariant()
 
-    def Z2_invariant(self, E_f = 0, filling_factor=1):
+    def Z2_invariant(self):
+        if np.isclose(self.dE, 0, rtol = 1e-4):
+            print("Z2 Invariant is ill defined for gapless dispersions.")
+            return 0
         # NOTE: TR invariant is ill defined for gapless dispersions.
         g, tb = self.geometry, self.tight_binding
         O = tb.O # Time-Reversal Operator
@@ -53,11 +70,13 @@ class WaveFunction(Notation):
         kx, ky = g.kx_bulk, g.ky_bulk
         trims = g.trims
         deltas = []
+        N_bands = len(tb.sublattice_idxs) * len(tb.coupled_states)
+        N_occ = [i for i in range(N_bands//2)]
         for k in trims:
             i = np.argmin(np.abs(g.kx_bulk - k[0]))
             j = np.argmin(np.abs(g.ky_bulk - k[1]))
-            key = f"[{kx[i]},{ky[j]}]"
-            u_k = U_k[key]
+            key = f"[{kx[i]}, {ky[j]}]"
+            u_k = U_k[key][:, N_occ]
             w_k = u_k.conj().T @ O @ u_k.conj()
             w_k_det = np.linalg.det(w_k)
             P_k = pf.pfaffian(w_k)
@@ -81,22 +100,22 @@ class WaveFunction(Notation):
             ip = (i + 1) % N_k # periodic BC
             for j in range(N_k):
                 jp = (j + 1) % N_k # periodic BC
-                u = U_k[f"[{kx[i]},{ky[j]}]"][:, band]
-                u_x = U_k[f"[{kx[ip]},{ky[j]}]"][:, band]
-                u_y = U_k[f"[{kx[i]},{ky[jp]}]"][:, band]
-                u_xy = U_k[f"[{kx[ip]},{ky[jp]}]"][:, band]
-                U_1 = self._phase(np.vdot(u, u_x), tol)
-                U_2 = self._phase(np.vdot(u_x, u_xy), tol)
-                U_3 = self._phase(np.vdot(u_xy, u_y), tol)
-                U_4 = self._phase(np.vdot(u_y, u), tol)
-                F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4]
+                u = U_k[f"[{kx[i]}, {ky[j]}]"][:, band]
+                u_x = U_k[f"[{kx[ip]}, {ky[j]}]"][:, band]
+                u_y = U_k[f"[{kx[i]}, {ky[jp]}]"][:, band]
+                u_xy = U_k[f"[{kx[ip]}, {ky[jp]}]"][:, band]
+                U_1 = self._phase(np.vdot(u, u_x))
+                U_2 = self._phase(np.vdot(u_x, u_xy))
+                U_3 = self._phase(np.vdot(u_xy, u_y))
+                U_4 = self._phase(np.vdot(u_y, u))
+                # F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4] # NOTE: Debugging
                 F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
         return C, F#, F_dict
         
-    def _phase(self, S, tol):
+    def _phase(self, S):
         norm = np.abs(S)
-        return (S / norm) if norm > tol else (1 + 0j)
+        return (S / norm)
     
     def plot_berry_flux(self, F:np.ndarray=None):
         g = self.geometry

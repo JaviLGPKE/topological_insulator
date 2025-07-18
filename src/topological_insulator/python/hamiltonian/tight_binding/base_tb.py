@@ -122,7 +122,7 @@ class TightBinding(Notation):
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
-                    outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_2}|"
+                    outer_product = f"|{alpha}, {sigma_1}><{alpha}, {sigma_2}|"
                     eigenvalue_dict[outer_product] = -1j * S_y[n, m]
         O_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         C = self.C
@@ -257,7 +257,7 @@ class TightBinding(Notation):
                 # Spin
                 for sigma_1 in self.spin_dict.values():
                     for sigma_2 in self.spin_dict.values():
-                            outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                            outer_product = f"|{alpha}, {sigma_1}><{beta}, {sigma_2}|"
                             eigenvalue_dict[outer_product] = H_t if sigma_1 == sigma_2 else 0
         return eigenvalue_dict
 
@@ -270,9 +270,13 @@ class TightBinding(Notation):
         for i, (j, m_j) in enumerate(self.coupled_states):
             for n, (k, m_k) in enumerate(self.coupled_states):
                 if j == 3/2 and k == 3/2:
-                    if abs(m_j) == 3/2 and abs(m_k) == 3/2:
+                    if m_j == 3/2 and m_k == 3/2:
                         H[i, n] += d_heavy
-                    elif abs(m_j) == 1/2 and abs(m_k) == 1/2:
+                    elif m_j == -3/2 and m_k == -3/2:
+                        H[i, n] += d_heavy
+                    elif m_j == 1/2 and m_k == 1/2:
+                        H[i, n] -= d_light
+                    elif m_j == -1/2 and m_k == -1/2:
                         H[i, n] -= d_light
                     else: 
                         continue
@@ -292,7 +296,7 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
-                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        outer_product = f"|{alpha}, {sigma_1}><{beta}, {sigma_2}|"
                         H_so = 0
                         # s-s Kane coupling
                         if alpha == "s" and beta == "s":
@@ -330,7 +334,7 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
-                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        outer_product = f"|{alpha}, {sigma_1}><{beta}, {sigma_2}|"
                         H_so = 0
                         if alpha == "s" and beta == "s":
                             pass
@@ -368,7 +372,7 @@ class TightBinding(Notation):
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
-                    outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_1}|"
+                    outer_product = f"|{alpha}, {sigma_1}><{alpha}, {sigma_1}|"
                     H_int = 0
                     if sigma_1 != sigma_2:
                         continue
@@ -404,7 +408,7 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     for beta in self.orbitals:
-                        outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                        outer_product = f"|{alpha}, {sigma_1}><{beta}, {sigma_2}|"
                         H_z = 0
                         if alpha == "s":
                             pauli_matrix = self.pauli_matrix_dict[2]
@@ -421,7 +425,7 @@ class TightBinding(Notation):
         E_p = m_parser["E_p"]
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for alpha in self.orbitals:
-                outer_product = f"|{alpha},{sigma_1}><{alpha},{sigma_1}|"
+                outer_product = f"|{alpha}, {sigma_1}><{alpha}, {sigma_1}|"
                 H_z = 0
                 if alpha == "s":
                     H_z += E_s
@@ -438,7 +442,7 @@ class TightBinding(Notation):
         H_uncoupled = np.zeros((N, N), dtype=complex)
         for i, (alpha, sigma_1) in enumerate(orbital_states):
             for j, (beta, sigma_2) in enumerate(orbital_states):
-                outer_product = f"|{alpha},{sigma_1}><{beta},{sigma_2}|"
+                outer_product = f"|{alpha}, {sigma_1}><{beta}, {sigma_2}|"
                 try:
                     E_ij = eigenvalue_dict[outer_product]
                 except: 
