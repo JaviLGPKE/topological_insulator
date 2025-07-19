@@ -1,6 +1,5 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from itertools import product
 from pfapack import pfaffian as pf
 
 from ..notation import Notation
@@ -20,21 +19,6 @@ class TopologicalInvariants(Notation):
         self.cell_parser = cell_parser
         self.geometry = geometry
         self.tight_binding = tight_binding
-        # Band Gap
-        self._calculate_bandgap()
-    
-    def _calculate_bandgap(self):
-        g, tb = self.geometry, self.tight_binding
-        K_point = g.K_point
-        E_k = tb.E_k_dict[f"{K_point}"]
-        N  = len(E_k)
-        N_occ = N // 2 
-        VBM0 = E_k[N_occ-1]
-        CBM0 = E_k[N_occ]
-        mu = self.mu = 0.5*(VBM0 + CBM0)
-        VBM = E_k[E_k < mu]
-        CBM = E_k[E_k > mu]
-        self.dE = CBM.min() - VBM.max()
 
     def get_zak_phase(self, band = 1):
         assert(self.model_options.location in ["both", "edge"])
@@ -52,49 +36,48 @@ class TopologicalInvariants(Notation):
         print(f"Zak Phase - Done!")
         return zak_phase
 
-    def get_topological_invariant(self, band=None, tol=1e-6):
+    def get_topological_invariant(self, bands, tol=1e-6):
         assert self.model_options.location in ["both", "bulk"]
         if not np.isclose(self.cell_parser.field.magnetic.value, 0, rtol=tol):
-            return self.abelian_chern_invariant(band, tol)
+            return self.abelian_chern_invariant(bands, tol)
         else:
-            return self.Z2_invariant()
+            return self.Z2_invariant(bands)
 
-    def Z2_invariant(self):
-        if np.isclose(self.dE, 0, rtol = 1e-4):
-            print("Z2 Invariant is ill defined for gapless dispersions.")
-            return 0
-        # NOTE: TR invariant is ill defined for gapless dispersions.
+    def Z2_invariant(self, bands=[]):
+        print(f"Calculating Z2 Invariant...")
         g, tb = self.geometry, self.tight_binding
+        if bands == []:
+            N_bands = len(tb.sublattice_idxs) * len(tb.coupled_states)
+            bands = [i for i in range(N_bands//2)]
         O = tb.O # Time-Reversal Operator
         U_k = tb.U_k_dict
         kx, ky = g.kx_bulk, g.ky_bulk
         trims = g.trims
         deltas = []
-        N_bands = len(tb.sublattice_idxs) * len(tb.coupled_states)
-        N_occ = [i for i in range(N_bands//2)]
         for k in trims:
             i = np.argmin(np.abs(g.kx_bulk - k[0]))
             j = np.argmin(np.abs(g.ky_bulk - k[1]))
             key = f"[{kx[i]}, {ky[j]}]"
-            u_k = U_k[key][:, N_occ]
+            u_k = U_k[key][:, bands]
             w_k = u_k.conj().T @ O @ u_k.conj()
             w_k_det = np.linalg.det(w_k)
             P_k = pf.pfaffian(w_k)
             delta_i = np.sqrt(w_k_det) / P_k
             deltas.append(np.sign(delta_i.real))
         total_product = np.prod(deltas)
-        Z_2 = int((1 - total_product) / 2)  # maps +1 to 0, −1 to 1
+        Z_2 = int((1 - total_product) / 2) # maps +1 to 0, −1 to 1
+        print(f"Z2 Invariant - Done!")
         return Z_2
 
-    def abelian_chern_invariant(self, band, tol):
+    def abelian_chern_invariant(self, bands, tol):
+        band = 0 if bands == [] else bands[0]
+        print(f"Calculating Chern Invariant...")
         geom = self.geometry
         N_k = geom.N_k
         kx = geom.kx_bulk
         ky = geom.ky_bulk
         U_k = self.tight_binding.U_k_dict
         # Berry Curvature
-        if band == None:
-            band = 0
         F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
         for i in range(N_k):
             ip = (i + 1) % N_k # periodic BC
@@ -111,6 +94,7 @@ class TopologicalInvariants(Notation):
                 # F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4] # NOTE: Debugging
                 F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
+        print(f"Chern Invariant - Done!")
         return C, F#, F_dict
         
     def _phase(self, S):

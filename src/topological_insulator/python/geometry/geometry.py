@@ -225,7 +225,7 @@ class Geometry:
         A = a1[0]*a2[1] - a1[1]*a2[0]
         b1 = self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
         b2 = self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
-        K_point = self.K_point = ((b1 + b2)/3).tolist()
+        K_point = self.K_point = ((2*b1 + b2)/3).tolist()
         trims = self.trims = [np.array([0.0, 0.0]), 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
         # Bulk
         if self.model_options.BZ == "reduced":

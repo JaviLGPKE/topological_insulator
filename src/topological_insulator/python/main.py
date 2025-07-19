@@ -47,18 +47,19 @@ class Problem:
             # Tight-Binding
             tight_binding:TightBinding = self.hamiltonian[key]["tight_binding"]
             tight_binding.solve_eigenvalues(self.geometry, H_type)
+            tight_binding.build_band_structure(self.geometry)
             # invariants
-            invariants = TopologicalInvariants(
+            topological_invariants = TopologicalInvariants(
                 model_options=self.model_options, cell_parser=self.cell_parser, 
                 geometry=self.geometry, tight_binding = tight_binding
             )
-            self.hamiltonian[key]["topological_invariants"] = invariants
+            self.hamiltonian[key]["topological_invariants"] = topological_invariants
     
-    def get_topological_invariant(self, band = 0, tol= 1e-6):
+    def get_topological_invariant(self, bands = [], tol= 1e-6):
         location = self.model_options.location
         assert(location in ["both", "bulk"])
-        invariants: TopologicalInvariants = self.hamiltonian["bulk"]["topological_invariants"]
-        return invariants.get_topological_invariant(band, tol)
+        topological_invariants: TopologicalInvariants = self.hamiltonian["bulk"]["topological_invariants"]
+        return topological_invariants.get_topological_invariant(bands, tol)
 
     def plot(self, plot_type="lattice", location:str=None, legend:bool=False, hide:bool=True, F=None):
         if plot_type == "lattice":

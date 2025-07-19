@@ -109,8 +109,8 @@ class TightBinding(Notation):
 
     def _time_reversal_operator(self):
         """
-        The Time-Reversal (TR) operator, for usage always apply the complex conjugate to
-        the operator or state the TR acts upon.
+        The Time-Reversal (TR) operator. NOTE: for usage always apply the complex conjugate to
+        the operator or state the TR operator acts upon.
 
         Returns
         -------
