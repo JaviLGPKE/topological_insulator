@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
+from scipy.optimize import linear_sum_assignment
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -41,7 +42,7 @@ class TightBindingBulk(TightBinding):
             H_k_dict, E_k_dict, U_k_dict = {}, {}, {}
             for k_x in geometry.kx_bulk:
                 for k_y in geometry.ky_bulk:
-                    key = f"[{k_x},{k_y}]"
+                    key = f"[{k_x}, {k_y}]"
                     k = np.array([k_x, k_y])
                     H_k = self._fourier_transform(geometry, k)
                     E_k, U_k = self._solve_eigenvalues(H_k)
@@ -103,13 +104,157 @@ class TightBindingBulk(TightBinding):
         sublattice_dict[label_i] += z_ij
         return sublattice_dict 
 
+    def build_band_structure(self, geometry: Geometry):
+        """
+        Extract band energies along the high-symmetry path, ensuring continuous bands
+        by reordering eigenvalues/eigenvectors based on eigenvector overlap.
+        Returns:
+            band_dict : dictionary containing energies for each band
+            path      : high symmetry k-path
+            ticks     : positions for labels
+            labels    : high-symmetry labels
+        """
+
+        kpoints, path, ticks, labels = self._build_high_symmetry_path(geometry)
+        kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
+        E_3d = self._reshape_Ek_into_grid(kx_grid, ky_grid)
+
+        # Find grid indices for each k-point in the path
+        indices = []
+        for (kx, ky) in kpoints:
+            ix = np.argmin(np.abs(kx_grid - kx))
+            iy = np.argmin(np.abs(ky_grid - ky))
+            indices.append((ix, iy))
+        
+        n_k = len(indices)  # Number of k-points along the path
+        n_bands = E_3d.shape[2]  # Number of bands
+        E_ordered = np.zeros((n_k, n_bands))  # Reordered eigenvalues
+        U_prev = None  # Eigenvectors at previous k-point
+
+        for i, (ix, iy) in enumerate(indices):
+            key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
+            E_k = E_3d[ix, iy, :]  # Eigenvalues (ascending order)
+            U_k = self.U_k_dict[key]  # Eigenvectors (columns in same order)
+            
+            # For the first k-point, use original order
+            if i == 0:
+                E_ordered[0, :] = E_k
+                U_prev = U_k
+                continue
+            
+            # Compute overlap matrix: <ψ_{prev,i} | ψ_{current,j}>
+            M = U_prev.conj().T @ U_k
+            cost_matrix = 1 - np.abs(M)  # Cost matrix for assignment
+            
+            # Find optimal assignment to maximize total overlap
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            permutation = col_ind  # Permutation to reorder current bands
+            
+            # Apply permutation to eigenvalues and eigenvectors
+            E_ordered[i, :] = E_k[permutation]
+            U_k_ordered = U_k[:, permutation]
+            U_prev = U_k_ordered  # Update for next k-point
+
+        # Create band dictionary with continuous bands
+        band_dict = {i: E_ordered[:, i] for i in range(n_bands)}
+        
+        self.band_structure_data = {
+            "band_dict": band_dict,
+            "path": path,
+            "ticks": ticks,
+            "labels": labels
+        }
+    
+    def _build_high_symmetry_path(self, geometry):
+        """
+        Construct k-points along the high-symmetry path and corresponding distances,
+        ticks and labels for plotting.
+        Returns:
+            kpoints : list of (kx, ky) tuples
+            dist    : list of cumulative distances along path
+            ticks   : positions for high-symmetry labels
+            labels  : names of high-symmetry points
+        """
+        Nk = geometry.N_k
+        b1, b2 = geometry.b1, geometry.b2
+        Gamma = (0.0, 0.0)
+        M     = (0.5 * b1).tolist()
+        K     = ((2*b1 + b2) / 3).tolist()
+        path = [("G", Gamma), ("M", M), ("K", K), ("G", Gamma)]
+
+        kpoints, dist, ticks, labels = [], [0.0], [], []
+        cumd = 0.0
+
+        for i in range(len(path) - 1):
+            label_i, k_i = path[i]
+            label_j, k_j = path[i+1]
+            ticks.append(cumd)
+            labels.append(label_i)
+            for t in range(Nk):
+                frac = t / Nk
+                kx = k_i[0] + frac * (k_j[0] - k_i[0])
+                ky = k_i[1] + frac * (k_j[1] - k_i[1])
+                if kpoints:
+                    dk = np.hypot(kx - kpoints[-1][0], ky - kpoints[-1][1])
+                    cumd += dk
+                kpoints.append((kx, ky))
+                dist.append(cumd)
+
+        ticks.append(cumd)
+        labels.append(path[-1][0])
+        # drop last dist so that len(dist) == len(kpoints)
+        return kpoints, dist[:-1], ticks, labels
+
+    def _reshape_Ek_into_grid(self, kx_grid, ky_grid):
+        """
+        Internal helper to reshape E_k_dict into a 3D array E_3d[ix, iy, band].
+        """
+        n_kx, n_ky = len(kx_grid), len(ky_grid)
+        first = next(iter(self.E_k_dict))
+        N_bands = self.E_k_dict[first].shape[0]
+        E_3d = np.zeros((n_kx, n_ky, N_bands))
+        for ix, kx in enumerate(kx_grid):
+            for iy, ky in enumerate(ky_grid):
+                E_3d[ix, iy, :] = self.E_k_dict[f"[{kx}, {ky}]"]
+        return E_3d
+
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
+        """
+        Plot all bands whose energies are non-zero at all k-points.
+        """
+        fig, ax = plt.subplots(figsize=(8, 5))
+        band_dict = self.band_structure_data["band_dict"]
+        path = self.band_structure_data["path"]
+        ticks = self.band_structure_data["ticks"]
+        labels = self.band_structure_data["labels"]
+        N_bands = len(band_dict)
+        cmap = plt.cm.viridis
+        colors = cmap(np.linspace(0, 1, N_bands))
+        if bands == []:
+            bands = [i for i in range(N_bands)]
+        for idx, energies in band_dict.items():
+            if idx not in bands:
+                continue
+            if hide and np.all(np.abs(energies) < 1e-8):
+                continue
+            ax.plot(path, energies, lw=1.5, color=colors[idx])
+
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels)
+        ax.set_xlim(path[0], path[-1])
+        ax.set_xlabel("k-path", fontsize=12)
+        ax.set_ylabel("E/eV", fontsize=12)
+        ax.grid(True, ls="--", lw=0.5)
+        plt.tight_layout()
+        plt.show()
+    
     def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx), len(ky)
         E_k_list = []
         for k_x in kx:
             for k_y in ky:
-                key = f"[{k_x},{k_y}]"
+                key = f"[{k_x}, {k_y}]"
                 E_k_list.append(self.E_k_dict[key])
         E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
         E_3d = E_stacked.reshape(n_kx, n_ky, -1)
@@ -132,81 +277,4 @@ class TightBindingBulk(TightBinding):
         ax.set_ylabel(r'$k_y$', fontsize=12)
         ax.set_zlabel(r'$E$', fontsize=12)
         plt.title('Bulk Band Structure', fontsize=14)
-        plt.show()
-
-    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
-        """
-        Plot band-structure along G → K → M → K' → G
-        in a hexagonal BZ, automatically computing the
-        reciprocal vectors from geometry.a1, geometry.a2.
-        """
-        Nk_per_segment = geometry.N_k 
-        b1, b2 = geometry.b1, geometry.b2
-        Gamma = (0.0, 0.0)
-        M     = (0.5*b1).tolist()
-        K   = ((2*b1 + b2)/3).tolist()
-        path = [
-        ("G",  Gamma),
-        ("M",  M),
-        ("K", K),
-        ("G",  Gamma),
-        ]
-        kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
-        n_kx, n_ky = len(kx_grid), len(ky_grid)
-        first_key = next(iter(self.E_k_dict))
-        N_bands   = self.E_k_dict[first_key].shape[0]
-        E_3d = np.zeros((n_kx, n_ky, N_bands))
-        for ix, kx in enumerate(kx_grid):
-            for iy, ky in enumerate(ky_grid):
-                key = f"[{kx},{ky}]"
-                E_3d[ix, iy, :] = self.E_k_dict[key]
-        # 1) Build the high‐symmetry k‐path + cumulative distance
-        kpoints = []
-        dist    = [0.0]
-        ticks   = []
-        labels  = []
-        cumd    = 0.0
-        for idx in range(len(path)-1):
-            lbl_i, k_i = path[idx]
-            lbl_j, k_j = path[idx+1]
-            ticks.append(cumd)
-            labels.append(lbl_i)
-            for t in range(Nk_per_segment):
-                frac = t / Nk_per_segment
-                kx = k_i[0] + frac*(k_j[0]-k_i[0])
-                ky = k_i[1] + frac*(k_j[1]-k_i[1])
-                if kpoints:
-                    dk = np.hypot(kx - kpoints[-1][0], ky - kpoints[-1][1])
-                    cumd += dk
-                kpoints.append((kx, ky))
-                dist.append(cumd)
-        ticks.append(cumd)
-        labels.append(path[-1][0])
-        # 2) Get the nearest grid index:
-        indices = []
-        for kx, ky in kpoints:
-            ix = np.argmin(np.abs(kx_grid - kx))
-            iy = np.argmin(np.abs(ky_grid - ky))
-            indices.append((ix, iy))
-        # 3) Build E_path by indexing into E_3d
-        E_path = np.array([E_3d[ix, iy, :] for (ix, iy) in indices])
-        dist = dist[:len(kpoints)]
-        # 4) Plot
-        fig, ax = plt.subplots(figsize=(8, 5))
-        colormap = plt.cm.viridis  # Choose colormap (e.g., 'viridis', 'plasma', 'Spectral')
-        band_colors = colormap(np.linspace(0, 1, N_bands))  # Distribute colors evenly across bands
-        if bands == []:
-            bands = range(N_bands)
-        for band in bands:
-            band_energies = E_path[:, band]
-            if not np.all(np.abs(band_energies) < 1e-8) and hide:
-                ax.plot(dist, band_energies, 
-                        lw=1.5, 
-                        color=band_colors[band])  # Assign color by band index
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(labels)
-        ax.set_xlim(dist[0], dist[-1])
-        ax.set_xlabel("k-path", fontsize=12)
-        ax.set_ylabel("E/eV", fontsize=12)
-        ax.grid(True, ls="--", lw=0.5)
         plt.show()

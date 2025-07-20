@@ -225,6 +225,7 @@ class Geometry:
         A = a1[0]*a2[1] - a1[1]*a2[0]
         b1 = self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
         b2 = self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
+        K_point = self.K_point = ((2*b1 + b2)/3).tolist()
         trims = self.trims = [np.array([0.0, 0.0]), 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
         # Bulk
         if self.model_options.BZ == "reduced":
@@ -236,8 +237,8 @@ class Geometry:
         # Include trim points in k-space
         trim_kx = [t[0] for t in trims]
         trim_ky = [t[1] for t in trims]
-        kx_bulk = np.unique(np.concatenate([discretization, trim_kx, ((b1 + b2)/3).tolist()]))
-        ky_bulk = np.unique(np.concatenate([discretization, trim_ky, ((b1 + b2)/3).tolist()]))
+        kx_bulk = np.unique(np.concatenate([discretization, trim_kx, K_point]))
+        ky_bulk = np.unique(np.concatenate([discretization, trim_ky, K_point]))
         self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
         self.N_k = len(kx_bulk)
         self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)

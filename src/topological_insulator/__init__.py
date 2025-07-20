@@ -1,5 +1,5 @@
 from .python import (Problem, ModelOptions,
-                   CellParser, Geometry, TightBindingBulk, TightBindingEdge)
+                   CellParser, Geometry, TightBindingBulk, TightBindingEdge, TopologicalInvariants)
 
 __all__ = [
     "Problem",
@@ -7,5 +7,6 @@ __all__ = [
     "CellParser",
     "Geometry",
     "TightBindingBulk",
-    "TightBindingEdge"
+    "TightBindingEdge",
+    "TopologicalInvariants"
 ]
