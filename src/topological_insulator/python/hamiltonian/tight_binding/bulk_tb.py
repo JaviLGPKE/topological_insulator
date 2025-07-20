@@ -114,48 +114,37 @@ class TightBindingBulk(TightBinding):
             ticks     : positions for labels
             labels    : high-symmetry labels
         """
-
         kpoints, path, ticks, labels = self._build_high_symmetry_path(geometry)
         kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
         E_3d = self._reshape_Ek_into_grid(kx_grid, ky_grid)
-
         # Find grid indices for each k-point in the path
         indices = []
         for (kx, ky) in kpoints:
             ix = np.argmin(np.abs(kx_grid - kx))
             iy = np.argmin(np.abs(ky_grid - ky))
             indices.append((ix, iy))
-        
         n_k = len(indices)  # Number of k-points along the path
         n_bands = E_3d.shape[2]  # Number of bands
         E_ordered = np.zeros((n_k, n_bands))  # Reordered eigenvalues
         U_prev = None  # Eigenvectors at previous k-point
-
         for i, (ix, iy) in enumerate(indices):
             key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
             E_k = E_3d[ix, iy, :]  # Eigenvalues (ascending order)
             U_k = self.U_k_dict[key]  # Eigenvectors (columns in same order)
-            
             # For the first k-point, use original order
             if i == 0:
                 E_ordered[0, :] = E_k
                 U_prev = U_k
                 continue
-            
-            # Compute overlap matrix: <ψ_{prev,i} | ψ_{current,j}>
+            # Compute overlap matrix: <Psi_{prev,i} | Psi_{current,j}>
             M = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(M)  # Cost matrix for assignment
-            
+            cost_matrix = 1 - np.abs(M) # Cost matrix for assignment
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            permutation = col_ind  # Permutation to reorder current bands
-            
-            # Apply permutation to eigenvalues and eigenvectors
+            permutation = col_ind
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
-            U_prev = U_k_ordered  # Update for next k-point
-
-        # Create band dictionary with continuous bands
+            U_prev = U_k_ordered 
         band_dict = {i: E_ordered[:, i] for i in range(n_bands)}
         
         self.band_structure_data = {
