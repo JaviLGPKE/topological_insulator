@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
+from scipy.optimize import linear_sum_assignment
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -103,62 +104,60 @@ class TightBindingBulk(TightBinding):
         sublattice_dict[label_i] += z_ij
         return sublattice_dict 
 
-    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
-        kx, ky = geometry.kx_bulk, geometry.ky_bulk
-        n_kx, n_ky = len(kx), len(ky)
-        E_k_list = []
-        for k_x in kx:
-            for k_y in ky:
-                key = f"[{k_x}, {k_y}]"
-                E_k_list.append(self.E_k_dict[key])
-        E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
-        E_3d = E_stacked.reshape(n_kx, n_ky, -1)
-        n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
-        KX, KY = np.meshgrid(kx, ky, indexing='ij') 
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        for band in range(n_bands):
-            E = E_3d[:, :, band]
-            if np.allclose(E, 0, rtol=1e-6):# and hide:
-                # Ignore zero values
-                continue 
-            ax.plot_surface(
-                KX, KY, E,
-                cmap='viridis',
-                alpha=0.6, 
-                edgecolor='none'
-            )
-        ax.set_xlabel(r'$k_x$', fontsize=12)
-        ax.set_ylabel(r'$k_y$', fontsize=12)
-        ax.set_zlabel(r'$E$', fontsize=12)
-        plt.title('Bulk Band Structure', fontsize=14)
-        plt.show()
-
-    def build_band_structure(self, geometry:Geometry):
+    def build_band_structure(self, geometry: Geometry):
         """
-        Extract band energies along the high-symmetry path and organize them into
-        a dict: band_index -> list of energies at each k-point.
+        Extract band energies along the high-symmetry path, ensuring continuous bands
+        by reordering eigenvalues/eigenvectors based on eigenvector overlap.
         Returns:
             band_dict : dictionary containing energies for each band
             path      : high symmetry k-path
             ticks     : positions for labels
             labels    : high-symmetry labels
         """
+
         kpoints, path, ticks, labels = self._build_high_symmetry_path(geometry)
-    
         kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
         E_3d = self._reshape_Ek_into_grid(kx_grid, ky_grid)
 
+        # Find grid indices for each k-point in the path
         indices = []
         for (kx, ky) in kpoints:
             ix = np.argmin(np.abs(kx_grid - kx))
             iy = np.argmin(np.abs(ky_grid - ky))
             indices.append((ix, iy))
-        E_path = np.array([E_3d[ix, iy, :] for ix, iy in indices])
+        
+        n_k = len(indices)  # Number of k-points along the path
+        n_bands = E_3d.shape[2]  # Number of bands
+        E_ordered = np.zeros((n_k, n_bands))  # Reordered eigenvalues
+        U_prev = None  # Eigenvectors at previous k-point
 
-        N_bands = E_path.shape[1]
-        band_dict = {i: E_path[:, i] for i in range(N_bands)}
+        for i, (ix, iy) in enumerate(indices):
+            key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
+            E_k = E_3d[ix, iy, :]  # Eigenvalues (ascending order)
+            U_k = self.U_k_dict[key]  # Eigenvectors (columns in same order)
+            
+            # For the first k-point, use original order
+            if i == 0:
+                E_ordered[0, :] = E_k
+                U_prev = U_k
+                continue
+            
+            # Compute overlap matrix: <ψ_{prev,i} | ψ_{current,j}>
+            M = U_prev.conj().T @ U_k
+            cost_matrix = 1 - np.abs(M)  # Cost matrix for assignment
+            
+            # Find optimal assignment to maximize total overlap
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+            permutation = col_ind  # Permutation to reorder current bands
+            
+            # Apply permutation to eigenvalues and eigenvectors
+            E_ordered[i, :] = E_k[permutation]
+            U_k_ordered = U_k[:, permutation]
+            U_prev = U_k_ordered  # Update for next k-point
 
+        # Create band dictionary with continuous bands
+        band_dict = {i: E_ordered[:, i] for i in range(n_bands)}
+        
         self.band_structure_data = {
             "band_dict": band_dict,
             "path": path,
@@ -247,4 +246,35 @@ class TightBindingBulk(TightBinding):
         ax.set_ylabel("E/eV", fontsize=12)
         ax.grid(True, ls="--", lw=0.5)
         plt.tight_layout()
+        plt.show()
+    
+    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
+        kx, ky = geometry.kx_bulk, geometry.ky_bulk
+        n_kx, n_ky = len(kx), len(ky)
+        E_k_list = []
+        for k_x in kx:
+            for k_y in ky:
+                key = f"[{k_x}, {k_y}]"
+                E_k_list.append(self.E_k_dict[key])
+        E_stacked = np.stack(E_k_list)  # Shape: (n_kx * n_ky, n_bands)
+        E_3d = E_stacked.reshape(n_kx, n_ky, -1)
+        n_bands = E_3d.shape[2]  # nº eigenvalues per k-point
+        KX, KY = np.meshgrid(kx, ky, indexing='ij') 
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        for band in range(n_bands):
+            E = E_3d[:, :, band]
+            if np.allclose(E, 0, rtol=1e-6):# and hide:
+                # Ignore zero values
+                continue 
+            ax.plot_surface(
+                KX, KY, E,
+                cmap='viridis',
+                alpha=0.6, 
+                edgecolor='none'
+            )
+        ax.set_xlabel(r'$k_x$', fontsize=12)
+        ax.set_ylabel(r'$k_y$', fontsize=12)
+        ax.set_zlabel(r'$E$', fontsize=12)
+        plt.title('Bulk Band Structure', fontsize=14)
         plt.show()
