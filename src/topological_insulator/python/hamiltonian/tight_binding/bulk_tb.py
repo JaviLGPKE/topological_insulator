@@ -123,14 +123,15 @@ class TightBindingBulk(TightBinding):
             ix = np.argmin(np.abs(kx_grid - kx))
             iy = np.argmin(np.abs(ky_grid - ky))
             indices.append((ix, iy))
-        n_k = len(indices)  # Number of k-points along the path
-        n_bands = E_3d.shape[2]  # Number of bands
-        E_ordered = np.zeros((n_k, n_bands))  # Reordered eigenvalues
-        U_prev = None  # Eigenvectors at previous k-point
+        n_k = len(indices)
+        n_bands = E_3d.shape[2]
+        E_ordered = np.zeros((n_k, n_bands))
+        U_ordered = np.zeros((n_k, n_bands, n_bands), dtype=complex)
+        U_prev = None
         for i, (ix, iy) in enumerate(indices):
             key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
-            E_k = E_3d[ix, iy, :]  # Eigenvalues (ascending order)
-            U_k = self.U_k_dict[key]  # Eigenvectors (columns in same order)
+            E_k = E_3d[ix, iy, :]
+            U_k = self.U_k_dict[key]
             # For the first k-point, use original order
             if i == 0:
                 E_ordered[0, :] = E_k
@@ -144,11 +145,14 @@ class TightBindingBulk(TightBinding):
             permutation = col_ind
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
-            U_prev = U_k_ordered 
+            U_ordered[i] = U_k_ordered
+            U_prev = U_k_ordered
         band_dict = {i: E_ordered[:, i] for i in range(n_bands)}
-        
+        eigenvector_dict = {i: U_ordered[:, i, :] for i in range(n_bands)}
+
         self.band_structure_data = {
             "band_dict": band_dict,
+            "eigenvector_dict": eigenvector_dict,
             "path": path,
             "ticks": ticks,
             "labels": labels
@@ -207,20 +211,22 @@ class TightBindingBulk(TightBinding):
                 E_3d[ix, iy, :] = self.E_k_dict[f"[{kx}, {ky}]"]
         return E_3d
 
-    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], 
+                            hide:bool=True):
         """
         Plot all bands whose energies are non-zero at all k-points.
         """
-        fig, ax = plt.subplots(figsize=(8, 5))
+        N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
         band_dict = self.band_structure_data["band_dict"]
         path = self.band_structure_data["path"]
         ticks = self.band_structure_data["ticks"]
         labels = self.band_structure_data["labels"]
-        N_bands = len(band_dict)
         cmap = plt.cm.viridis
         colors = cmap(np.linspace(0, 1, N_bands))
         if bands == []:
             bands = [i for i in range(N_bands)]
+
+        fig, ax = plt.subplots(figsize=(8, 5))
         for idx, energies in band_dict.items():
             if idx not in bands:
                 continue
@@ -237,7 +243,8 @@ class TightBindingBulk(TightBinding):
         plt.tight_layout()
         plt.show()
     
-    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
+    def plot_dispersion(self, geometry: Geometry, legend:bool=False, 
+                        hide:bool=True):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx), len(ky)
         E_k_list = []
