@@ -254,7 +254,7 @@ class Geometry:
                 discretization_edge = np.linspace(-factor*np.pi/(T_norm), factor*np.pi/(T_norm), N_k)
             else:
                 raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
-            self.k_edge = discretization_edge
+            self.k_edge = np.unique(np.concatenate([discretization_edge, [0.0]]))
 
     def get_location_idx(self, location:str):
         a = self.lattice_constant
