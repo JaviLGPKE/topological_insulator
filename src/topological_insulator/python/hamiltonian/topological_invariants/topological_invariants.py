@@ -25,14 +25,13 @@ class TopologicalInvariants(Notation):
         geometry = self.geometry
         U_k_dict = self.tight_binding.U_k_dict
         print(f"Calculating Zak Phase...")
-        # Chern Invariant
         zak_phase = 0
         for i in range(1, geometry.N_k):
             k, k_0 = geometry.k_edge[i], geometry.k_edge[i-1]
             u_k = U_k_dict[f"{k}"][:, band]
             u_k_0 = U_k_dict[f"{k_0}"][:, band]
             S = np.vdot(u_k_0, u_k)
-            zak_phase += 1j * np.log(S/np.abs(S)) # phase = log(e^(i*phase))
+            zak_phase += 1j * np.log(S/np.abs(S)) # phase = ln(e^(i*phase))
         print(f"Zak Phase - Done!")
         return zak_phase
 

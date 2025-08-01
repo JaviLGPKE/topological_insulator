@@ -138,8 +138,8 @@ class TightBindingBulk(TightBinding):
                 U_prev = U_k
                 continue
             # Compute overlap matrix: <Psi_{prev,i} | Psi_{current,j}>
-            M = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(M) # Cost matrix for assignment
+            G = U_prev.conj().T @ U_k
+            cost_matrix = 1 - np.abs(G) # Cost matrix for assignment
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
             permutation = col_ind

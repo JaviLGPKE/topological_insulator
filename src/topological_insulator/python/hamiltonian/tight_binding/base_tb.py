@@ -45,7 +45,7 @@ class TightBinding(Notation):
             (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
         ]
         self.C = self._coupled_unitary_transform()
-        self.T = self._harmonic_unitary_transform()
+        self.A = self._harmonic_unitary_transform()
         # Parity
         self.O = self._time_reversal_operator()
 
@@ -88,23 +88,23 @@ class TightBinding(Notation):
             The Spherical Harmonic unitary matrix. 
         """
         M, N = len(self.uncoupled_states), len(self.orbital_states)
-        T = np.zeros((N, M), dtype=complex)
+        A = np.zeros((N, M), dtype=complex)
         inv_sqrt_2 = 1/np.sqrt(2)
         # s-orbitals
-        T[0, 0] = 1
-        T[1, 1] = 1
+        A[0, 0] = 1
+        A[1, 1] = 1
         # p-orbitals
-        T[2, 2] = -1 * inv_sqrt_2
-        T[2, 4] = 1j * inv_sqrt_2
-        T[3, 3] = -1 * inv_sqrt_2
-        T[3, 5] = 1j * inv_sqrt_2
-        T[4, 2] = 1 * inv_sqrt_2
-        T[4, 4] = 1j * inv_sqrt_2
-        T[5, 3] = 1 * inv_sqrt_2
-        T[5, 5] = 1j * inv_sqrt_2
-        T[6, 6] = 1
-        T[7, 7] = 1
-        return T
+        A[2, 2] = -1 * inv_sqrt_2
+        A[2, 4] = 1j * inv_sqrt_2
+        A[3, 3] = -1 * inv_sqrt_2
+        A[3, 5] = 1j * inv_sqrt_2
+        A[4, 2] = 1 * inv_sqrt_2
+        A[4, 4] = 1j * inv_sqrt_2
+        A[5, 3] = 1 * inv_sqrt_2
+        A[5, 5] = 1j * inv_sqrt_2
+        A[6, 6] = 1
+        A[7, 7] = 1
+        return A
 
     def _time_reversal_operator(self):
         """
@@ -122,13 +122,13 @@ class TightBinding(Notation):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
                 for alpha in self.orbitals:
                     outer_product = f"|{alpha}, {sigma_1}><{alpha}, {sigma_2}|"
-                    eigenvalue_dict[outer_product] = 1j * S_y[n, m]
+                    eigenvalue_dict[outer_product] = -1j * S_y[n, m]
         O_uncoupled = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         C = self.C
-        T = self.T
-        P = C @ T
-        P_dagger = T.conj().T @ C.conj().T
-        O_coupled = P @ O_uncoupled @ P_dagger.conj()
+        A = self.A
+        M = C @ A
+        M_dagger = A.conj().T @ C.conj().T
+        O_coupled = M @ O_uncoupled @ M_dagger.conj()
         O_sublattice = np.identity(n=len(self.delta_vectors))
         O = np.kron(O_sublattice, O_coupled)
         return O
@@ -145,9 +145,9 @@ class TightBinding(Notation):
 
     def _sublattice_data(self, geometry:Geometry, location:str, idx_i:int):
         C = self.C # Clebsch-Gordan Transformation Matrix
-        T = self.T # Cartesian to Angular Momentum Unitary Transform
-        P = C @ T
-        P_dagger = T.conj().T @ C.conj().T
+        A = self.A # Cartesian to Angular Momentum Unitary Transform
+        M = C @ A
+        M_dagger = A.conj().T @ C.conj().T
         neighbour_idxs = geometry.get_neighbour_idxs(idx_i)
         dr_list_NN, _ = geometry.get_dr(location, idx_i, neighbour_idxs, type="list")
         dr_dict_NN, dm_dict_NN = geometry.get_dr(location, idx_i, neighbour_idxs, type="dict")
@@ -159,38 +159,38 @@ class TightBinding(Notation):
         for idx_j, cosines in zip(neighbour_idxs, directional_cosines_NN):
             eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
             H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = P @ H_cartesian @ P_dagger
+            H_coupled = M @ H_cartesian @ M_dagger
             t_ij_dict[idx_j] = self.hopping_anisotropy(geometry, idx_i, idx_j, H_coupled)
         # Kane-Mele Spin-Orbit Coupling
         s_ij_dict = {}
         for idx_j in next_neighbour_idxs:
             eigenvalue_dict = self.kane_mele_coupling(geometry, idx_i, idx_j)
             H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-            H_coupled = P @ H_cartesian @ P_dagger
+            H_coupled = M @ H_cartesian @ M_dagger
             s_ij_dict[idx_j] = H_coupled
         # Chadi Spin-Orbit Coupling
         c_ij_dict = {}
         eigenvalue_dict = self.chadi_coupling(geometry, idx_i)
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P @ H_cartesian @ P_dagger
+        H_coupled = M @ H_cartesian @ M_dagger
         c_ij_dict[idx_i] = H_coupled
         # Mean Field Decoupled Interaction
         u_ij_dict = {}
         eigenvalue_dict = self.mean_field_interaction(geometry, idx_i)
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P @ H_cartesian @ P_dagger
+        H_coupled = M @ H_cartesian @ M_dagger
         u_ij_dict[idx_i] = H_coupled
         # Zeeman-Splitting
         z_ij_dict = {}
         eigenvalue_dict = self.zeeman_splitting(geometry, idx_i)
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P @ H_cartesian @ P_dagger
+        H_coupled = M @ H_cartesian @ M_dagger
         z_ij_dict[idx_i] = H_coupled
         # Staggered Sublattice Potential
         m_ij_dict = {}
         eigenvalue_dict = self.staggered_sublattice_potential(geometry, idx_i)
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
-        H_coupled = P @ H_cartesian @ P_dagger
+        H_coupled = M @ H_cartesian @ M_dagger
         m_ij_dict[idx_i] = H_coupled
         return {
                 "idx": idx_i,
