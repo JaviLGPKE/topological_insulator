@@ -188,7 +188,7 @@ class TightBinding(Notation):
         z_ij_dict[idx_i] = H_coupled
         # Staggered Sublattice Potential
         m_ij_dict = {}
-        eigenvalue_dict = self.staggered_sublattice_potential(geometry, idx_i)
+        eigenvalue_dict = self.onsite_energy(geometry, idx_i)
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         H_coupled = M @ H_cartesian @ M_dagger
         m_ij_dict[idx_i] = H_coupled
@@ -236,8 +236,6 @@ class TightBinding(Notation):
                         elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
                             p_orb = alpha if alpha.startswith('p') else beta
                             d = self.direction_index[p_orb.split('_')[1]]
-                            if p_orb != "p_z":
-                                pass
                             H_t += p_cosines[d] * t_sp
                         # p-p
                         elif alpha.startswith('p') and beta.startswith('p'):
@@ -394,9 +392,9 @@ class TightBinding(Notation):
                         eigenvalue_dict[outer_product] = H_z
         return eigenvalue_dict
 
-    def staggered_sublattice_potential(self, geometry: Geometry, site_i):
+    def onsite_energy(self, geometry: Geometry, idx_i):
         eigenvalue_dict = {}
-        label_i = geometry.get_label(site_i)
+        label_i = geometry.get_label(idx_i)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         m_parser = eigenvalue_parser.value["onsite_energy"][label_i]
         E_s = m_parser["E_s"]
@@ -404,14 +402,14 @@ class TightBinding(Notation):
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for alpha in self.orbitals:
                 outer_product = f"|{alpha}, {sigma_1}><{alpha}, {sigma_1}|"
-                H_z = 0
+                E = 0
                 if alpha == "s":
-                    H_z += E_s
+                    E += E_s
                 elif alpha.startswith('p'):
-                    H_z += E_p
+                    E += E_p
                 else: 
                     raise ValueError(f"Not Implemented!")
-                eigenvalue_dict[outer_product] = H_z
+                eigenvalue_dict[outer_product] = E
         return eigenvalue_dict
 
     def _uncoupled_eigenvalue_matrix(self, eigenvalue_dict:dict):
