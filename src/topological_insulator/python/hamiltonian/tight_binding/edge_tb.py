@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
+from scipy.optimize import linear_sum_assignment
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -195,9 +196,6 @@ class TightBindingEdge(TightBinding):
             band_dict : reordered energies for each band
             path      : cumulative distance along k-path
         """
-        from scipy.optimize import linear_sum_assignment
-        import numpy as np
-
         # Get k-points along the edge path
         k_list = geometry.k_edge
         keys = [f"{k}" for k in k_list]
@@ -207,31 +205,25 @@ class TightBindingEdge(TightBinding):
         U_ordered = np.zeros((N_k, N_bands, N_bands), dtype=complex)
         U_prev = None
         for i, key in enumerate(keys):
-            E_k = self.E_k_dict[key]  # Eigenvalues (ascending)
-            U_k = self.U_k_dict[key]  # Eigenvectors (original order)
+            E_k = self.E_k_dict[key]
+            U_k = self.U_k_dict[key]
             if i == 0:
                 E_ordered[0, :] = E_k
+                U_ordered[0, :, :] = U_k
                 U_prev = U_k
                 continue
-            # Compute overlap matrix: <Psi_{prev,i} | Psi_{current,j}>
-            M = U_prev.conj().T @ U_k
-            cost = 1 - np.abs(M)  # Minimize this cost
+            # <Psi_{prev,i} | Psi_{current,j}>
+            G = U_prev.conj().T @ U_k
+            cost = 1 - np.abs(G)  # Minimize this cost
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost)
             permutation = col_ind  # Reordering for current bands
             E_ordered[i, :] = E_k[permutation]
-            U_k_ordered  = U_k[:, permutation]
+            U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
             U_prev = U_k_ordered 
         band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
         eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
-        mean_energies = {band_index: energies.mean()
-                     for band_index, energies in band_dict.items()}
-        sorted_bands = sorted(mean_energies, key=lambda i: mean_energies[i])
-        band_dict = {new_idx: band_dict[old_idx]
-                            for new_idx, old_idx in enumerate(sorted_bands)}
-        eigenvector_dict = {new_idx: eigenvector_dict[old_idx]
-                                    for new_idx, old_idx in enumerate(sorted_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
             "eigenvector_dict": eigenvector_dict,

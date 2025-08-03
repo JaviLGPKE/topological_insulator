@@ -71,10 +71,10 @@ class TopologicalInvariants(Notation):
     def abelian_chern_invariant(self, bands, tol):
         band = 0 if bands == [] else bands[0]
         print(f"Calculating Chern Invariant...")
-        geom = self.geometry
-        N_k = geom.N_k
-        kx = geom.kx_bulk
-        ky = geom.ky_bulk
+        geometry = self.geometry
+        N_k = geometry.N_k
+        kx = geometry.kx_bulk
+        ky = geometry.ky_bulk
         U_k = self.tight_binding.U_k_dict
         # Berry Curvature
         F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
@@ -99,6 +99,9 @@ class TopologicalInvariants(Notation):
     def _phase(self, S):
         norm = np.abs(S)
         return (S / norm)
+    
+    def _get_edge_bands(self):
+        band_dict = self.tight_binding
     
     def plot_berry_flux(self, F:np.ndarray=None):
         g = self.geometry

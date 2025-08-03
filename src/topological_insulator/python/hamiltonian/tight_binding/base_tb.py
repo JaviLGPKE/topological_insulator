@@ -212,8 +212,8 @@ class TightBinding(Notation):
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
-        t_ss = nn_parser["t_ss_sigma"]
-        t_sp = nn_parser["t_sp_sigma"]
+        t_ss_sigma = nn_parser["t_ss_sigma"]
+        t_sp_sigma = nn_parser["t_sp_sigma"]
         t_pp_sigma = nn_parser["t_pp_sigma"]
         t_pp_pi = nn_parser["t_pp_pi"]
         l, m = (cosines[0], cosines[1])
@@ -231,12 +231,12 @@ class TightBinding(Notation):
                         H_t = 0
                         # s-s
                         if alpha == beta == 's':
-                            H_t += t_ss
+                            H_t += t_ss_sigma
                         # s-p
                         elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
                             p_orb = alpha if alpha.startswith('p') else beta
                             d = self.direction_index[p_orb.split('_')[1]]
-                            H_t += p_cosines[d] * t_sp
+                            H_t += p_cosines[d] * t_sp_sigma
                         # p-p
                         elif alpha.startswith('p') and beta.startswith('p'):
                             i_dir = alpha.split('_')[1]
