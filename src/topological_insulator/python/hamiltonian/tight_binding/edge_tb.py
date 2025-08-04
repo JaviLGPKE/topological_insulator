@@ -188,6 +188,7 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
+
     def build_band_structure(self, geometry: Geometry):
         """
         Build continuous band structure for the edge by reordering eigenvalues
@@ -270,3 +271,4 @@ class TightBindingEdge(TightBinding):
         if legend:
             plt.legend()
         plt.show()
+

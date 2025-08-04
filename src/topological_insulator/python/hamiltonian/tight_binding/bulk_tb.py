@@ -152,7 +152,6 @@ class TightBindingBulk(TightBinding):
         eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
-            "eigenvector_dict": eigenvector_dict,
             "path": path,
             "ticks": ticks,
             "labels": labels
@@ -211,22 +210,20 @@ class TightBindingBulk(TightBinding):
                 E_3d[ix, iy, :] = self.E_k_dict[f"[{kx}, {ky}]"]
         return E_3d
 
-    def plot_band_structure(self, geometry:Geometry, bands:list = [], 
-                            hide:bool=True):
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
         """
         Plot all bands whose energies are non-zero at all k-points.
         """
-        N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
+        fig, ax = plt.subplots(figsize=(8, 5))
         band_dict = self.band_structure_data["band_dict"]
         path = self.band_structure_data["path"]
         ticks = self.band_structure_data["ticks"]
         labels = self.band_structure_data["labels"]
+        N_bands = len(band_dict)
         cmap = plt.cm.viridis
         colors = cmap(np.linspace(0, 1, N_bands))
         if bands == []:
             bands = [i for i in range(N_bands)]
-
-        fig, ax = plt.subplots(figsize=(8, 5))
         for idx, energies in band_dict.items():
             if idx not in bands:
                 continue
@@ -243,8 +240,7 @@ class TightBindingBulk(TightBinding):
         plt.tight_layout()
         plt.show()
     
-    def plot_dispersion(self, geometry: Geometry, legend:bool=False, 
-                        hide:bool=True):  
+    def plot_dispersion(self, geometry: Geometry, legend:bool=False, hide:bool=True):  
         kx, ky = geometry.kx_bulk, geometry.ky_bulk
         n_kx, n_ky = len(kx), len(ky)
         E_k_list = []
