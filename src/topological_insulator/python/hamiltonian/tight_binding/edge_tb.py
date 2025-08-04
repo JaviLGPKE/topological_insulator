@@ -98,11 +98,11 @@ class TightBindingEdge(TightBinding):
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
-            # Hoppings
+            # NN Hoppings
             self._hoppings_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
-            # Kane-Mele Spin-Orbit Coupling
+            # NNN Spin-Orbit Coupling
             self._kane_mele_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
@@ -197,8 +197,8 @@ class TightBindingEdge(TightBinding):
             path      : cumulative distance along k-path
         """
         # Get k-points along the edge path
-        k_list = geometry.k_edge
-        keys = [f"{k}" for k in k_list]
+        k_edge = geometry.k_edge
+        keys = [f"{k}" for k in k_edge]
         N_k = len(keys)
         N_bands = len(self.E_k_dict[keys[0]])
         E_ordered = np.zeros((N_k, N_bands))
@@ -209,26 +209,41 @@ class TightBindingEdge(TightBinding):
             U_k = self.U_k_dict[key]
             if i == 0:
                 E_ordered[0, :] = E_k
-                U_ordered[0, :, :] = U_k
+                U_ordered[0, :, :] = U_k 
                 U_prev = U_k
                 continue
             # <Psi_{prev,i} | Psi_{current,j}>
             G = U_prev.conj().T @ U_k
-            cost = 1 - np.abs(G)  # Minimize this cost
+            cost = 1 - np.abs(G)
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost)
-            permutation = col_ind  # Reordering for current bands
+            permutation = col_ind
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
             U_prev = U_k_ordered 
         band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
-        eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
+        eigenvector_dict = {i: U_ordered[:, :, i] for i in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
             "eigenvector_dict": eigenvector_dict,
-            "path": k_list,
+            "path": k_edge,
         }
+    
+    def get_edge_bands(self, geometry:Geometry, site_idx=0, k_target=0.0, threshold=0.28):
+        """
+        Return the list of band indices whose eigenvectors are edge localized
+        """
+        k_edge = geometry.k_edge
+        N_sites = len(self.sublattice_idxs)
+        N_projections = len(self.coupled_states)
+        N_bands = N_sites * N_projections
+        edge_bands = []
+        k_idx = np.argmin(np.abs(k_edge - k_target))
+        for n in range(N_bands):
+            if self.weight(n, site_idx, k_idx) > threshold:
+                edge_bands.append(n)
+        return edge_bands
 
     def plot_dispersion(self, geometry: Geometry, bands:list = [], 
                         legend: bool = False, hide: bool = True) -> None:

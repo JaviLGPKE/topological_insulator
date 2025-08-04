@@ -22,6 +22,7 @@ class TightBinding(Notation):
         # Arguments
         self.model_options = model_options
         self.cell_parser = cell_parser
+        self.band_structure_data = None
         # Parameters
         self.u_B = (6.63e-34)/(4 * np.pi * 9.11e-31)
         # Sublattice
@@ -442,6 +443,16 @@ class TightBinding(Notation):
     def _solve_eigenvalues(self, H):
         E, U = linalg.eigh(H, lower=True, check_finite=False, driver="evr")
         return E, U
+
+    def weight(self, band, site_idx, k_idx):
+        if self.band_structure_data is None:
+            return None
+        N_projections = len(self.coupled_states)
+        Psi_dict = self.band_structure_data["eigenvector_dict"]
+        Psi_k = Psi_dict[band][k_idx]
+        start = site_idx * N_projections
+        end = start + N_projections
+        return np.sum(np.abs(Psi_k[start:end])**2)
 
     @abstractmethod
     def plot_dispersion(self, geometry: Geometry):

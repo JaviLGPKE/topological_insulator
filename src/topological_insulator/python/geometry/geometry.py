@@ -21,8 +21,8 @@ class Geometry:
         parser = self.cell_parser.geometry
         self.lattice_constant = a = parser.lattice_constant.value
         lattice_vectors = parser.lattice_vectors.value
-        self.a1, self.a2 = a * np.array(lattice_vectors[0]), a * np.array(lattice_vectors[1])
-        self.delta_vectors = a * np.array(parser.delta_vectors.value)
+        self.a1, self.a2 = np.array(lattice_vectors[0]), np.array(lattice_vectors[1])
+        self.delta_vectors =  np.array(parser.delta_vectors.value)
         for n, d in enumerate(self.delta_vectors):
             setattr(self, f"d_{n+1}", np.array(d))
 
@@ -194,7 +194,7 @@ class Geometry:
         edge_indices = sorted({i for e in boundary_edges for i in e})
         tree  = cKDTree(sites)
         seed_idxs = np.array(edge_indices, dtype=int)
-        radius = 1.01 * self.lattice_constant
+        radius = 1.01
         bonded = tree.query_ball_point(sites[seed_idxs], r=radius)
         all_edge = set(seed_idxs.tolist())
         for nbr_list in bonded:

@@ -9,7 +9,7 @@ class CellParser:
         self.load_structure(structure_path, structure_name)
         self.eigenvalue_dict = None
         if material_path != "":
-            self.eigenvalue_dict = self.get_eigenvalues(material_path, material_name)
+            self.eigenvalue_dict = self.load_eigenvalues(material_path, material_name)
 
     def load_structure(self, structure_path, structure_name):
         path = os.path.join(structure_path, structure_name)
@@ -22,7 +22,7 @@ class CellParser:
         for hyperparameter, values in json_data.items():
             setattr(self, hyperparameter, Parameter(hyperparameter, values))
     
-    def get_eigenvalues(self, material_path, material_name):
+    def load_eigenvalues(self, material_path, material_name):
         path = os.path.join(material_path, material_name)
         if os.path.exists(path):
             with open(path, 'r') as file:
