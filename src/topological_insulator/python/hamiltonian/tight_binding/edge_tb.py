@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from time import perf_counter
+from scipy.optimize import linear_sum_assignment
 
 from .base_tb import TightBinding
 from ...geometry import Geometry
@@ -97,11 +98,11 @@ class TightBindingEdge(TightBinding):
             i = idx_map[idx_i]
             row_slice = slice(i * N_projections, (i + 1) * N_projections)
             site_dict_i = self.site_data_dict[idx_i]
-            # Hoppings
+            # NN Hoppings
             self._hoppings_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
-            # Kane-Mele Spin-Orbit Coupling
+            # NNN Spin-Orbit Coupling
             self._kane_mele_coupling_ft(
                 geometry, N_projections, idx_map, row_slice, idx_i, site_dict_i, H_k, k
             )
@@ -187,27 +188,81 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
-    def plot_dispersion(self, geometry: Geometry, bands:list = [], legend: bool = False, hide: bool = True) -> None:
-        k_vals = np.array([float(key) for key in self.E_k_dict.keys()])
-        k_vals_sorted = k_vals
-        E_list = []
-        for key in sorted(self.E_k_dict, key=lambda x: float(x)):
+
+    def build_band_structure(self, geometry: Geometry):
+        """
+        Build continuous band structure for the edge by reordering eigenvalues
+        based on eigenvector overlap between consecutive k-points.
+        Returns:
+            band_dict : reordered energies for each band
+            path      : cumulative distance along k-path
+        """
+        # Get k-points along the edge path
+        k_edge = geometry.k_edge
+        keys = [f"{k}" for k in k_edge]
+        N_k = len(keys)
+        N_bands = len(self.E_k_dict[keys[0]])
+        E_ordered = np.zeros((N_k, N_bands))
+        U_ordered = np.zeros((N_k, N_bands, N_bands), dtype=complex)
+        U_prev = None
+        for i, key in enumerate(keys):
             E_k = self.E_k_dict[key]
-            E_list.append(E_k)
-        E_list = np.array(E_list)
-        plt.figure(figsize=(10, 8))
-        N_bands = E_list.shape[1]
-        colormap = plt.cm.get_cmap('viridis', N_bands)
-        band_colors = [colormap(i) for i in range(N_bands)]
-        
+            U_k = self.U_k_dict[key]
+            if i == 0:
+                E_ordered[0, :] = E_k
+                U_ordered[0, :, :] = U_k 
+                U_prev = U_k
+                continue
+            # <Psi_{prev,i} | Psi_{current,j}>
+            G = U_prev.conj().T @ U_k
+            cost = 1 - np.abs(G)
+            # Find optimal assignment to maximize total overlap
+            row_ind, col_ind = linear_sum_assignment(cost)
+            permutation = col_ind
+            E_ordered[i, :] = E_k[permutation]
+            U_k_ordered = U_k[:, permutation]
+            U_ordered[i] = U_k_ordered
+            U_prev = U_k_ordered 
+        band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
+        eigenvector_dict = {i: U_ordered[:, :, i] for i in range(N_bands)}
+        self.band_structure_data = {
+            "band_dict": band_dict,
+            "eigenvector_dict": eigenvector_dict,
+            "path": k_edge,
+        }
+    
+    def get_edge_bands(self, geometry:Geometry, site_idx=0, k_target=0.0, threshold=0.28):
+        """
+        Return the list of band indices whose eigenvectors are edge localized
+        """
+        k_edge = geometry.k_edge
+        N_sites = len(self.sublattice_idxs)
+        N_projections = len(self.coupled_states)
+        N_bands = N_sites * N_projections
+        edge_bands = []
+        k_idx = np.argmin(np.abs(k_edge - k_target))
+        for n in range(N_bands):
+            if self.weight(n, site_idx, k_idx) > threshold:
+                edge_bands.append(n)
+        return edge_bands
+
+    def plot_dispersion(self, geometry: Geometry, bands:list = [], 
+                        legend: bool = False, hide: bool = True) -> None:
+        N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
         if bands == []:
             bands = range(N_bands)
+        colormap = plt.cm.get_cmap('viridis', N_bands)
+        band_colors = [colormap(i) for i in range(N_bands)]
+        E_list = self.band_structure_data["band_dict"]
+        k_vals = self.band_structure_data["path"]
+
+        plt.figure(figsize=(10, 8))
         for band in bands:
-            E = E_list[:, band]
+            E = E_list[band]
             if np.allclose(E, 0, rtol=1e-6) and hide:
                 # Ignore zero values
                 continue 
-            plt.plot(k_vals_sorted, E, 
+            plt.plot(k_vals, E, 
                     color=band_colors[band], 
                     label=f"Band {band}")
         plt.xlabel(r"$k_{\parallel}$")
@@ -216,3 +271,4 @@ class TightBindingEdge(TightBinding):
         if legend:
             plt.legend()
         plt.show()
+

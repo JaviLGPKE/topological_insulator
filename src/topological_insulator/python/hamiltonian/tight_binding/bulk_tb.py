@@ -123,30 +123,33 @@ class TightBindingBulk(TightBinding):
             ix = np.argmin(np.abs(kx_grid - kx))
             iy = np.argmin(np.abs(ky_grid - ky))
             indices.append((ix, iy))
-        n_k = len(indices)  # Number of k-points along the path
-        n_bands = E_3d.shape[2]  # Number of bands
-        E_ordered = np.zeros((n_k, n_bands))  # Reordered eigenvalues
-        U_prev = None  # Eigenvectors at previous k-point
+        n_k = len(indices)
+        N_bands = E_3d.shape[2]
+        # Band Structure Correction 
+        E_ordered = np.zeros((n_k, N_bands))
+        U_ordered = np.zeros((n_k, N_bands, N_bands), dtype=complex)
+        U_prev = None
         for i, (ix, iy) in enumerate(indices):
             key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
-            E_k = E_3d[ix, iy, :]  # Eigenvalues (ascending order)
-            U_k = self.U_k_dict[key]  # Eigenvectors (columns in same order)
-            # For the first k-point, use original order
+            E_k = E_3d[ix, iy, :]
+            U_k = self.U_k_dict[key]
             if i == 0:
                 E_ordered[0, :] = E_k
+                U_ordered[0, :, :]  = U_k
                 U_prev = U_k
                 continue
-            # Compute overlap matrix: <Psi_{prev,i} | Psi_{current,j}>
-            M = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(M) # Cost matrix for assignment
+            # <Psi_{prev,i} | Psi_{current,j}>
+            G = U_prev.conj().T @ U_k
+            cost_matrix = 1 - np.abs(G) # Cost matrix for assignment
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
             permutation = col_ind
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
-            U_prev = U_k_ordered 
-        band_dict = {i: E_ordered[:, i] for i in range(n_bands)}
-        
+            U_ordered[i] = U_k_ordered
+            U_prev = U_k_ordered
+        band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
+        eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
             "path": path,

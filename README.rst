@@ -6,10 +6,7 @@ Tight-Binding approximation which includes **nearest neighbour hopping** and **s
 Installation
 ------------
 
-.. The **Solver C++** uses the finite element platform FEniCSx and a better, custom made version of multiphenicsx. 
-.. It is assumed you have a working conda environment or likewise.
-
-To use the library, simply install it using pip:
+To use the library in a Linux environment, simply install it using pip:
 
 .. code-block:: console
 

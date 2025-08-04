@@ -18,7 +18,8 @@
                 "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
                 "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
                 "chadi_soc":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-                "interaction":{"A":{"U":0, "n_s_up": 0, "n_s_down":0, "n_p_up":0, "n_p_down":0}}
+                "interaction":{"A":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
+                  "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
               }, "unit":"eV"
           },
           "B": {"value":{
@@ -31,7 +32,8 @@
                 "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
                 "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
                 "chadi_soc":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-                "interaction":{"B":{"U":0, "n_s_up": 0, "n_s_down":0, "n_p_up":0, "n_p_down":0}}
+                "interaction":{"B":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
+                  "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
               }, "unit":"eV"
           },
           "C": {"value":{
@@ -44,7 +46,8 @@
                 "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
                 "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
                 "chadi_soc":{"C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-                "interaction":{"C":{"U":0, "n_s_up": 0, "n_s_down":0, "n_p_up":0, "n_p_down":0}}
+                "interaction":{"C":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
+                  "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
               }, "unit":"eV"
           }
       },

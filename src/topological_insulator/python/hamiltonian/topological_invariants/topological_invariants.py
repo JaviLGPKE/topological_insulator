@@ -25,14 +25,13 @@ class TopologicalInvariants(Notation):
         geometry = self.geometry
         U_k_dict = self.tight_binding.U_k_dict
         print(f"Calculating Zak Phase...")
-        # Chern Invariant
         zak_phase = 0
         for i in range(1, geometry.N_k):
             k, k_0 = geometry.k_edge[i], geometry.k_edge[i-1]
             u_k = U_k_dict[f"{k}"][:, band]
             u_k_0 = U_k_dict[f"{k_0}"][:, band]
             S = np.vdot(u_k_0, u_k)
-            zak_phase += 1j * np.log(S/np.abs(S)) # phase = log(e^(i*phase))
+            zak_phase += 1j * np.log(S/np.abs(S)) # phase = ln(e^(i*phase))
         print(f"Zak Phase - Done!")
         return zak_phase
 
@@ -72,10 +71,10 @@ class TopologicalInvariants(Notation):
     def abelian_chern_invariant(self, bands, tol):
         band = 0 if bands == [] else bands[0]
         print(f"Calculating Chern Invariant...")
-        geom = self.geometry
-        N_k = geom.N_k
-        kx = geom.kx_bulk
-        ky = geom.ky_bulk
+        geometry = self.geometry
+        N_k = geometry.N_k
+        kx = geometry.kx_bulk
+        ky = geometry.ky_bulk
         U_k = self.tight_binding.U_k_dict
         # Berry Curvature
         F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
@@ -100,6 +99,37 @@ class TopologicalInvariants(Notation):
     def _phase(self, S):
         norm = np.abs(S)
         return (S / norm)
+
+    def _local_density_of_states(self, site_idx:int = 0, band:int=None,
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
+        geometry = self.geometry
+        tb = self.tight_binding
+        k_edge = geometry.k_edge
+        if band == None:
+            band = tb.get_edge_bands(geometry)
+        N_projections = len(tb.coupled_states)
+        N_sites = len(tb.sublattice_idxs)
+        N_bands = N_projections * N_sites
+        E_vals = np.linspace(E_min, E_max, N_E)
+        Psi_dict = tb.band_structure_data["eigenvector_dict"]
+        LDOS = np.zeros_like(E_vals)
+        for k_idx, k in enumerate(k_edge):
+            E_k = tb.E_k_dict[f"{k}"] 
+            for n in range(N_bands):
+                Psi_k = Psi_dict[n][k_idx, :]
+                start = site_idx * N_projections
+                end   = (site_idx + 1)*N_projections
+                c_i = Psi_k[start:end]
+                weight = np.sum(np.abs(c_i)**2)
+                LDOS += weight * self._lorentz(E_vals, E_k[n], eta)
+        LDOS /= len(k_edge)
+        plt.plot(E_vals, LDOS)
+        plt.xlabel("Energy (eV)")
+        plt.ylabel("Density of States")
+        plt.show()
+    
+    def _lorentz(self, E, E0, eta):
+        return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
     
     def plot_berry_flux(self, F:np.ndarray=None):
         g = self.geometry

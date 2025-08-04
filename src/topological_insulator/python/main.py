@@ -4,9 +4,12 @@ from .geometry import Geometry
 from .hamiltonian import (TightBinding, TightBindingBulk, TightBindingEdge, TopologicalInvariants)
 
 class Problem:
-    def __init__(self, data_path:str, file_name:str, save_path=None):
+    def __init__(self, structure_path:str, structure_name:str, 
+                 material_path:str="", material_name:str="", save_path=None):
         self.save_path = save_path
-        self.cell_parser = CellParser(data_path=data_path, file_name=file_name)
+        self.cell_parser = CellParser(
+            structure_path=structure_path, structure_name=structure_name, 
+            material_path=material_path, material_name=material_name)
         self.hamiltonian = {
             "bulk": {
                 "tight_binding": None,
@@ -17,7 +20,7 @@ class Problem:
                 "topological_invariants": None
             }
         }
-    
+
     def setup(self, N_r=10, N_k=200, location:str = "bulk", BZ:str="reduced", dangling_bonds:bool=False):
         if location not in ["both", "edge", "bulk"]:
             raise ValueError("Only 'bulk' and 'edge' cases considered.")
@@ -28,6 +31,8 @@ class Problem:
         self.geometry = Geometry(model_options=self.model_options, cell_parser=self.cell_parser)
         self.geometry.build_lattice()
         # Hamiltonian
+        if self.cell_parser.eigenvalue_dict is not None:
+            self.cell_parser.set_eigenvalues()
         for key in self.hamiltonian.keys():
             # Tight-Binding Approximation
             if location not in [key, "both"]:
