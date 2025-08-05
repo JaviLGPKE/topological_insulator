@@ -444,7 +444,7 @@ class TightBinding(Notation):
         E, U = linalg.eigh(H, lower=True, check_finite=False, driver="evr")
         return E, U
 
-    def weight(self, band, site_idx, k_idx):
+    def weight(self, k_idx, site_idx, band):
         if self.band_structure_data is None:
             return None
         N_projections = len(self.coupled_states)

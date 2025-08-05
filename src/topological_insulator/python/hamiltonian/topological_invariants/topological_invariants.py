@@ -100,19 +100,16 @@ class TopologicalInvariants(Notation):
         norm = np.abs(S)
         return (S / norm)
 
-    def get_local_density_of_states(self, site_idx:int = 0, band:int=None,
+    def get_local_density_of_states(self, site_idx:int = 0,
                                  E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
         geometry = self.geometry
         tb = self.tight_binding
         k_edge = geometry.k_edge
-        if band == None:
-            band = tb.get_edge_bands(geometry)
         N_projections = len(tb.coupled_states)
-        N_sites = len(tb.sublattice_idxs)
-        N_bands = N_projections * N_sites
-        E_vals = np.linspace(E_min, E_max, N_E)
+        N_bands = len(tb.sublattice_idxs) * N_projections
+        E = np.linspace(E_min, E_max, N_E)
         Psi_dict = tb.band_structure_data["eigenvector_dict"]
-        LDOS = np.zeros_like(E_vals)
+        LDOS = np.zeros_like(E)
         for k_idx, k in enumerate(k_edge):
             E_k = tb.E_k_dict[f"{k}"] 
             for n in range(N_bands):
@@ -121,9 +118,9 @@ class TopologicalInvariants(Notation):
                 end   = (site_idx + 1)*N_projections
                 c_i = Psi_k[start:end]
                 weight = np.sum(np.abs(c_i)**2)
-                LDOS += weight * self._lorentz(E_vals, E_k[n], eta)
+                LDOS += weight * self._lorentz(E, E_k[n], eta)
         LDOS /= len(k_edge)
-        return LDOS, E_vals
+        return E, LDOS
     
     def _lorentz(self, E, E0, eta):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
@@ -143,9 +140,30 @@ class TopologicalInvariants(Notation):
         ax.set_ylabel(r'$k_y$')
         ax.set_zlabel(r'$F$')
         plt.show()
-    
-    def plot_density_of_states(self, LDOS:np.ndarray, E_vals:np.ndarray):
-        plt.plot(E_vals, LDOS)
-        plt.xlabel("Energy (eV)")
-        plt.ylabel("Density of States (a.u)")
+
+    def plot_density_of_states(self, E_vals: np.ndarray,
+                            LDOS: np.ndarray,
+                            figsize: tuple = (8, 7),
+                            annotate_max: bool = True):
+        """
+        Plot LDOS vs. energy and, optionally, mark the energy at which LDOS is maximal,
+        all on the same axes.
+        """
+        idx_max = np.argmax(LDOS)
+        E_peak = E_vals[idx_max]
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(E_vals, LDOS, color="k", lw=1.8)
+        if annotate_max:
+            ax.axvline(E_peak,
+                    color="r",
+                    linestyle='--',
+                    linewidth=1.5,
+                    label=f'Max LDOS at {E_peak:.2f} eV')
+        ax.set_xlabel("Energy (eV)", fontsize=12)
+        ax.set_ylabel("LDOS (a.u.)", fontsize=12)
+        ax.set_title("Local Density of States", fontsize=14)
+        ax.legend(frameon=True)
+        ax.grid(True, ls=':', alpha=0.6)
+
+        plt.tight_layout()
         plt.show()

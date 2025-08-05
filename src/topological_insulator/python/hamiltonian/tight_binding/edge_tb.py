@@ -188,7 +188,6 @@ class TightBindingEdge(TightBinding):
         H_k_ii += z_ii
         H_k[row_slice, row_slice] += H_k_ii
 
-
     def build_band_structure(self, geometry: Geometry):
         """
         Build continuous band structure for the edge by reordering eigenvalues
@@ -231,7 +230,7 @@ class TightBindingEdge(TightBinding):
             "path": k_edge,
         }
     
-    def get_edge_bands(self, geometry:Geometry, site_idx=0, k_target=0.0, threshold=0.28):
+    def get_edge_bands(self, geometry:Geometry, edge_sites=[0], k_target=0.0, threshold=0.28):
         """
         Return the list of band indices whose eigenvectors are edge localized
         """
@@ -241,10 +240,11 @@ class TightBindingEdge(TightBinding):
         N_bands = N_sites * N_projections
         edge_bands = []
         k_idx = np.argmin(np.abs(k_edge - k_target))
-        for n in range(N_bands):
-            if self.weight(n, site_idx, k_idx) > threshold:
-                edge_bands.append(n)
-        return edge_bands
+        for i in edge_sites:
+            for n in range(N_bands):
+                if self.weight(k_idx, i, n) > threshold:
+                    edge_bands.append(n)
+        return sorted(edge_bands)
 
     def plot_dispersion(self, geometry: Geometry, bands:list = [], 
                         legend: bool = False, hide: bool = True) -> None:
@@ -266,7 +266,7 @@ class TightBindingEdge(TightBinding):
                     color=band_colors[band], 
                     label=f"Band {band}")
         plt.xlabel(r"$k_{\parallel}$")
-        plt.ylabel("Energy")
+        plt.ylabel("Energy (eV)")
         plt.title("Edge Band Structure")
         if legend:
             plt.legend()
