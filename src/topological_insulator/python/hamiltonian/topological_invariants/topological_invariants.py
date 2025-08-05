@@ -100,7 +100,7 @@ class TopologicalInvariants(Notation):
         norm = np.abs(S)
         return (S / norm)
 
-    def _local_density_of_states(self, site_idx:int = 0, band:int=None,
+    def get_local_density_of_states(self, site_idx:int = 0, band:int=None,
                                  E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
         geometry = self.geometry
         tb = self.tight_binding
@@ -123,10 +123,7 @@ class TopologicalInvariants(Notation):
                 weight = np.sum(np.abs(c_i)**2)
                 LDOS += weight * self._lorentz(E_vals, E_k[n], eta)
         LDOS /= len(k_edge)
-        plt.plot(E_vals, LDOS)
-        plt.xlabel("Energy (eV)")
-        plt.ylabel("Density of States")
-        plt.show()
+        return LDOS, E_vals
     
     def _lorentz(self, E, E0, eta):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
@@ -145,4 +142,10 @@ class TopologicalInvariants(Notation):
         ax.set_xlabel(r'$k_x$')
         ax.set_ylabel(r'$k_y$')
         ax.set_zlabel(r'$F$')
+        plt.show()
+    
+    def plot_density_of_states(self, LDOS:np.ndarray, E_vals:np.ndarray):
+        plt.plot(E_vals, LDOS)
+        plt.xlabel("Energy (eV)")
+        plt.ylabel("Density of States")
         plt.show()
