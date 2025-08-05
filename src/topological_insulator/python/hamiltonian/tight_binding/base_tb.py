@@ -346,7 +346,12 @@ class TightBinding(Notation):
         n_px_up, n_px_down = int_parser["n_px_up"], int_parser["n_px_down"]
         n_py_up, n_py_down = int_parser["n_py_up"], int_parser["n_py_down"]
         n_pz_up, n_pz_down = int_parser["n_pz_up"], int_parser["n_pz_down"]
-        E0 = -1 * (
+        p_interaction = {
+            "p_x": (n_px_up, n_px_down),
+            "p_y": (n_py_up, n_py_down),
+            "p_z": (n_pz_up, n_pz_down),
+        }
+        E0 = (
             U_s * n_s_up * n_s_down +
             U_p * (
             (n_px_up * n_px_down) + 
@@ -362,15 +367,10 @@ class TightBinding(Notation):
                 if alpha == "s":
                     n_s = n_s_down if sigma == "+" else n_s_up
                     H_int += U_s * n_s
-                elif alpha == "p_x":
-                    n_p_x = n_px_down if sigma == "+" else n_px_up
-                    H_int = U_p * n_p_x
-                elif alpha == "p_y":
-                    n_p_y = n_py_down if sigma == "+" else n_py_up
-                    H_int = U_p * n_p_y
-                elif alpha == "p_z":
-                    n_p_z = n_pz_down if sigma == "+" else n_pz_up
-                    H_int = U_p * n_p_z
+                elif alpha.startswith('p'):
+                    n_p_up, n_p_down = p_interaction[alpha]
+                    n_p = n_p_down if sigma == "+" else n_p_up
+                    H_int += U_p * n_p
                 else: 
                     raise ValueError(f"Not Implemented!")
                 eigenvalue_dict[outer_product] = H_int - E0

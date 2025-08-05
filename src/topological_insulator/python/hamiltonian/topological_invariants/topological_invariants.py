@@ -147,5 +147,5 @@ class TopologicalInvariants(Notation):
     def plot_density_of_states(self, LDOS:np.ndarray, E_vals:np.ndarray):
         plt.plot(E_vals, LDOS)
         plt.xlabel("Energy (eV)")
-        plt.ylabel("Density of States")
+        plt.ylabel("Density of States (a.u)")
         plt.show()
