@@ -32,9 +32,10 @@ class CellParser:
         return json_data
 
     def set_eigenvalues(self):
+        g = self.geometry
+        g.lattice_constant.value = self.eigenvalue_dict["lattice_constant"]
         eigenvalue_dict = self.eigenvalue_dict["eigenvalues"]
         sublattice_labels = self.sublattice_labels
-        g = self.geometry
         n_subs = len(g.delta_vectors.value)
         subs = sublattice_labels[:n_subs]
         for label_i in subs:
@@ -42,7 +43,7 @@ class CellParser:
             # Diagonal Values
             parser["onsite_energy"][label_i]["E_s"] = eigenvalue_dict["E_s"]
             parser["onsite_energy"][label_i]["E_p"] = eigenvalue_dict["E_p"]
-            parser["chadi_soc"][label_i]["lambda_pp"] = eigenvalue_dict["lambda_pp"]
+            parser["chadi_soc"][label_i]["Delta_pp"] = eigenvalue_dict["Delta_pp"]
             # Off-Diagonal Values
             for label_j in subs:
                 # Hoppings
@@ -53,6 +54,11 @@ class CellParser:
                     parser["nn_hopping"][label_j]["t_pp_pi"] = eigenvalue_dict["t_pp_pi"]
                     parser["nn_hopping"][label_j]["delta_heavy"] = eigenvalue_dict["delta"]
                     parser["nn_hopping"][label_j]["delta_light"] = eigenvalue_dict["delta"]
+                except:
+                    pass
+                try:
+                    parser["kane_mele_soc"][label_i]["lambda_ss"] = eigenvalue_dict["lambda_ss"]
+                    parser["kane_mele_soc"][label_i]["lambda_pp"] = eigenvalue_dict["lambda_pp"]
                 except:
                     pass
         

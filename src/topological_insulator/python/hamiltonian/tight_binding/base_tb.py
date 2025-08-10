@@ -30,6 +30,10 @@ class TightBinding(Notation):
         self.basis_vectors = np.array(cell_parser.geometry.lattice_vectors.value)
         self.delta_vectors = np.array(cell_parser.geometry.delta_vectors.value)
         # Clebsch-Gordan Coefficients
+        self.orbital_mapping = {
+            "s": [0, 1],
+            "p": [2, 8]
+        }
         self.orbital_states = [
             (orb, sigma) 
             for orb in self.orbitals 
@@ -44,7 +48,7 @@ class TightBinding(Notation):
         self.coupled_states = [
             (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
             (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
-        ]
+        ] 
         self.C = self._coupled_unitary_transform()
         self.A = self._harmonic_unitary_transform()
         # Parity
@@ -210,6 +214,8 @@ class TightBinding(Notation):
         }
 
     def slater_koster_hoppings(self, geometry:Geometry, idx_i, idx_j, cosines):
+        h = self.cell_parser.geometry.buckling_height.value
+        a = geometry.lattice_constant
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
@@ -218,7 +224,7 @@ class TightBinding(Notation):
         t_pp_sigma = nn_parser["t_pp_sigma"]
         t_pp_pi = nn_parser["t_pp_pi"]
         l, m = (cosines[0], cosines[1])
-        n = cosines[2] if len(cosines) == 3 else 0
+        n = h/a
         p_cosines = [l, m, n]
         # Hopping Eigenvalues
         eigenvalue_dict = {}
@@ -296,10 +302,14 @@ class TightBinding(Notation):
                             H_km += 1j * lambda_ss *  v_ij * sigma_z[n, m]
                         # s-p or p-s
                         elif (alpha == 's' and beta.startswith('p')) or (beta == 's' and alpha.startswith('p')):
+                            # no SO coupling
                             pass
                         # p-p
                         elif alpha.startswith('p') and beta.startswith('p'):
-                            pass
+                            if alpha == "p_z" and beta == "p_z":
+                                H_km = 1j * lambda_pp * v_ij * sigma_z[n, m]
+                            else:
+                                pass
                         else: 
                             raise ValueError(f"Not Implemented!")
                         eigenvalue_dict[outer_product] = H_km
@@ -309,9 +319,9 @@ class TightBinding(Notation):
         label_i = geometry.get_label(idx_i)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         so_parser = eigenvalue_parser.value["chadi_soc"][label_i]
-        lambda_ss = so_parser["lambda_ss"]
-        lambda_sp = so_parser["lambda_sp"]
-        lambda_pp = so_parser["lambda_pp"]
+        lambda_ss = so_parser["Delta_ss"]
+        lambda_sp = so_parser["Delta_sp"]
+        lambda_pp = so_parser["Delta_pp"]
         eigenvalue_dict = {}
         for n, sigma_1 in enumerate(self.spin_dict.values()):
             for m, sigma_2 in enumerate(self.spin_dict.values()):
@@ -452,7 +462,8 @@ class TightBinding(Notation):
         Psi_k = Psi_dict[band][k_idx]
         start = site_idx * N_projections
         end = start + N_projections
-        return np.sum(np.abs(Psi_k[start:end])**2)
+        c_k = Psi_k[start:end]
+        return np.sum(np.abs(c_k)**2)
 
     @abstractmethod
     def plot_dispersion(self, geometry: Geometry):

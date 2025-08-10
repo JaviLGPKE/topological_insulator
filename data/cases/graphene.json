@@ -1,0 +1,17 @@
+{
+    "name":"graphene",
+    "source": "Castro Neto et al., Rev. Mod. Phys. 81, 109 (2009)",
+    "lattice_constant": 2.46,
+    "buckling": 0.00,
+    "eigenvalues": {
+        "E_s": -2.99,
+        "E_p": 3.00,
+        "t_ss_sigma": -6.76,
+        "t_sp_sigma": 5.58,
+        "t_pp_sigma": 8.5,
+        "t_pp_pi": -2.9,
+        "Delta_pp": 1e-6,
+        "lambda_ss": 0,
+        "lambda_pp": 1e-6
+    }
+}

@@ -86,7 +86,6 @@ class Geometry:
             Tolerance for considering distances as equal to 'reference_dist'.
         """
         sites = self.sites
-        a = self.lattice_constant
         N = len(sites)     
         C = np.zeros((N, N), dtype=int)
         for i in range(N):
@@ -98,7 +97,7 @@ class Geometry:
                     dist_sq += diff * diff
                 dist = np.sqrt(dist_sq)
                 # Nearest Neighbours
-                if abs(dist - a) < tol:
+                if abs(dist - 1) < tol:
                     C[i, j] = 1
                     C[j, i] = 1 # h.c.
         self.nn_connectivity_matrix = C
@@ -229,19 +228,21 @@ class Geometry:
         trims = self.trims = [np.array([0.0, 0.0]), 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
         # Bulk
         if self.model_options.BZ == "reduced":
-            discretization = np.linspace(-np.pi/a, np.pi/a, N_k)
+            discretization = np.linspace(-np.pi, np.pi, N_k)
         elif self.model_options.BZ == "extended":
-            discretization = np.linspace(-factor*np.pi/a, factor*np.pi/a, N_k)
+            discretization = np.linspace(-factor*np.pi, factor*np.pi, N_k)
         else:
             raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
-        # Include trim points in k-space
-        trim_kx = [t[0] for t in trims]
-        trim_ky = [t[1] for t in trims]
-        kx_bulk = np.unique(np.concatenate([discretization, trim_kx, K_point]))
-        ky_bulk = np.unique(np.concatenate([discretization, trim_ky, K_point]))
-        self.kx_bulk, self.ky_bulk = kx_bulk, ky_bulk
-        self.N_k = len(kx_bulk)
-        self.kx_grid, self.ky_grid = np.meshgrid(kx_bulk, ky_bulk)
+
+        all_points = discretization.tolist()
+        for point in trims + [K_point]:
+            all_points.extend(point)  # Add both x and y
+        k_common = np.unique(all_points)
+        self.kx_bulk = self.ky_bulk = k_common
+        self.N_k = len(k_common)
+        self.kx_bulk = self.ky_bulk = k_common
+        self.N_k = len(k_common)
+        self.kx_grid, self.ky_grid = np.meshgrid(k_common, k_common, indexing='xy')
         # Edge
         if self.model_options.location in ["edge", "both"]:
             T = a1 if a2[1] > a1[1] else a2
@@ -257,18 +258,17 @@ class Geometry:
             self.k_edge = discretization_edge
 
     def get_location_idx(self, location:str):
-        a = self.lattice_constant
         sites = self.sites
         x_max, y_max = max(sites[:, 0]), max(sites[:, 1])
         x_min, y_min = min(sites[:, 0]), min(sites[:, 1])
         if location == "bulk":
-            x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=2e-1*a))[0]
-            y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=2e-1*a))[0]
+            x_idxs = np.where(np.isclose(sites[:, 0], x_max/2, rtol=2e-1))[0]
+            y_idxs = np.where(np.isclose(sites[:, 1], y_max/2, rtol=2e-1))[0]
             idx_candidates = np.intersect1d(x_idxs, y_idxs)
         elif location == "edge":
             edge_sites = self.edge_sites
-            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/3, rtol=5e-1*a))[0]
-            y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=5e-1*a))[0]
+            x_idxs = np.where(np.isclose(edge_sites[:, 0], x_max/3, rtol=5e-1))[0]
+            y_idxs = np.where(np.isclose(edge_sites[:, 1], y_min*0.90, rtol=5e-1))[0]
             edge_idxs = np.intersect1d(x_idxs, y_idxs)
             candidate_edge_sites = edge_sites[edge_idxs]
             idx_candidates = [np.where((sites == candidate).all(axis=1))[0][0] for candidate in candidate_edge_sites]

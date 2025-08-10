@@ -11,9 +11,8 @@ from IPython import embed
 class TightBindingEdge(TightBinding):
   
     def __init__(self, model_options, cell_parser):
-        super().__init__(model_options, cell_parser)
+        super().__init__(model_options, cell_parser) 
         self.location = "edge"  
-        self.H_k_0 = None
 
     def build_hamiltonian(self, geometry:Geometry):
         print(f"Building 'Edge' Hamiltonian...")
@@ -222,8 +221,8 @@ class TightBindingEdge(TightBinding):
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
             U_prev = U_k_ordered 
-        band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
-        eigenvector_dict = {i: U_ordered[:, :, i] for i in range(N_bands)}
+        band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
+        eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
             "eigenvector_dict": eigenvector_dict,
@@ -242,17 +241,19 @@ class TightBindingEdge(TightBinding):
         k_idx = np.argmin(np.abs(k_edge - k_target))
         for i in edge_sites:
             for n in range(N_bands):
-                if self.weight(k_idx, i, n) > threshold:
+                weight = self.weight(k_idx, i, n)
+                E_n = self.band_structure_data["band_dict"][n]
+                if weight > threshold and np.any(np.abs(E_n) > 1e-5):
                     edge_bands.append(n)
         return sorted(edge_bands)
 
-    def plot_dispersion(self, geometry: Geometry, bands:list = [], 
+    def plot_dispersion(self, geometry: Geometry, bands:list = [], edge_bands:list = [],
+                        x_max:float=None, x_min:float=None, y_max:float=None, y_min:float=None,
                         legend: bool = False, hide: bool = True) -> None:
         N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
         if bands == []:
             bands = range(N_bands)
-        colormap = plt.cm.get_cmap('viridis', N_bands)
-        band_colors = [colormap(i) for i in range(N_bands)]
+        # colormap = plt.cm.get_cmap('viridis', N_bands)
         E_list = self.band_structure_data["band_dict"]
         k_vals = self.band_structure_data["path"]
 
@@ -261,14 +262,23 @@ class TightBindingEdge(TightBinding):
             E = E_list[band]
             if np.allclose(E, 0, rtol=1e-6) and hide:
                 # Ignore zero values
-                continue 
+                continue
+            if band in edge_bands:
+                color = "r"
+            else:
+                color = "b"
             plt.plot(k_vals, E, 
-                    color=band_colors[band], 
+                    color=color, 
                     label=f"Band {band}")
+        
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy (eV)")
         plt.title("Edge Band Structure")
         if legend:
             plt.legend()
+        if x_min is not None or x_max is not None:
+            plt.xlim(left=x_min, right=x_max)
+        if y_min is not None or y_max is not None:
+            plt.ylim(bottom=y_min, top=y_max)
         plt.show()
 

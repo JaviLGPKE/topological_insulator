@@ -100,6 +100,24 @@ class TopologicalInvariants(Notation):
         norm = np.abs(S)
         return (S / norm)
 
+    def get_density_of_states(self,
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
+        geometry = self.geometry
+        tb = self.tight_binding
+        k_edge = geometry.k_edge
+        N_projections = len(tb.coupled_states)
+        N_bands = len(tb.sublattice_idxs) * N_projections
+        E = np.linspace(E_min, E_max, N_E)
+        DOS = np.zeros_like(E)
+        for i in range(len(self.sublattice_idxs)):
+            for k_idx, k in enumerate(k_edge):
+                E_k = tb.E_k_dict[f"{k}"] 
+                for n in range(N_bands):
+                    weight = tb.weight(k_idx, i, n)
+                    DOS += weight * self._lorentz(E, E_k[n], eta)
+        DOS /= len(k_edge)
+        return E, DOS
+    
     def get_local_density_of_states(self, site_idx:int = 0,
                                  E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
         geometry = self.geometry
@@ -108,16 +126,11 @@ class TopologicalInvariants(Notation):
         N_projections = len(tb.coupled_states)
         N_bands = len(tb.sublattice_idxs) * N_projections
         E = np.linspace(E_min, E_max, N_E)
-        Psi_dict = tb.band_structure_data["eigenvector_dict"]
         LDOS = np.zeros_like(E)
         for k_idx, k in enumerate(k_edge):
             E_k = tb.E_k_dict[f"{k}"] 
             for n in range(N_bands):
-                Psi_k = Psi_dict[n][k_idx, :]
-                start = site_idx * N_projections
-                end   = (site_idx + 1)*N_projections
-                c_i = Psi_k[start:end]
-                weight = np.sum(np.abs(c_i)**2)
+                weight = tb.weight(k_idx, site_idx, n)
                 LDOS += weight * self._lorentz(E, E_k[n], eta)
         LDOS /= len(k_edge)
         return E, LDOS
@@ -126,8 +139,8 @@ class TopologicalInvariants(Notation):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
     
     def plot_berry_flux(self, F:np.ndarray=None):
-        g = self.geometry
-        k_x, k_y = g.kx_bulk, g.ky_bulk
+        geometry = self.geometry
+        k_x, k_y = geometry.kx_bulk, geometry.ky_bulk
         KX_full, KY_full = np.meshgrid(k_x, k_y, indexing='ij')
         fig = plt.figure(figsize=(7,7))
         ax  = fig.add_subplot(111, projection='3d')
@@ -152,15 +165,16 @@ class TopologicalInvariants(Notation):
         idx_max = np.argmax(LDOS)
         E_peak = E_vals[idx_max]
         fig, ax = plt.subplots(figsize=figsize)
-        ax.plot(E_vals, LDOS, color="k", lw=1.8)
+        # ax.plot(E_vals, LDOS, color="k", lw=1.8)
+        ax.plot(LDOS, E_vals, color="k", lw=1.8)
         if annotate_max:
-            ax.axvline(E_peak,
+            ax.axhline(E_peak,
                     color="r",
                     linestyle='--',
                     linewidth=1.5,
                     label=f'Max LDOS at {E_peak:.2f} eV')
-        ax.set_xlabel("Energy (eV)", fontsize=12)
-        ax.set_ylabel("LDOS (a.u.)", fontsize=12)
+        ax.set_ylabel("Energy (eV)", fontsize=12)
+        ax.set_xlabel("LDOS (a.u.)", fontsize=12)
         ax.set_title("Local Density of States", fontsize=14)
         ax.legend(frameon=True)
         ax.grid(True, ls=':', alpha=0.6)

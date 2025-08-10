@@ -149,7 +149,7 @@ class TightBindingBulk(TightBinding):
             U_ordered[i] = U_k_ordered
             U_prev = U_k_ordered
         band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
-        eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
+        eigenvector_dict = {i: U_ordered[:, :, i] for i in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
             "path": path,
@@ -221,7 +221,7 @@ class TightBindingBulk(TightBinding):
         labels = self.band_structure_data["labels"]
         N_bands = len(band_dict)
         cmap = plt.cm.viridis
-        colors = cmap(np.linspace(0, 1, N_bands))
+        # colors = cmap(np.linspace(0, 1, N_bands))
         if bands == []:
             bands = [i for i in range(N_bands)]
         for idx, energies in band_dict.items():
@@ -229,7 +229,7 @@ class TightBindingBulk(TightBinding):
                 continue
             if hide and np.all(np.abs(energies) < 1e-8):
                 continue
-            ax.plot(path, energies, lw=1.5, color=colors[idx])
+            ax.plot(path, energies, lw=1.5, color="b")
 
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels)
