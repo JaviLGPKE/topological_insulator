@@ -19,8 +19,9 @@ class Geometry:
         self.idx_mapper = {label: idx for idx, label in enumerate(self.sublattice_labels)}
         # Vectors
         parser = self.cell_parser.geometry
-        self.lattice_constant = a = parser.lattice_constant.value
-        lattice_vectors = parser.lattice_vectors.value
+        self.lattice_constant = parser.lattice_constant.value
+        self.buckling_height = parser.buckling_height.value
+        self.lattice_vectors = lattice_vectors =  parser.lattice_vectors.value
         self.a1, self.a2 = np.array(lattice_vectors[0]), np.array(lattice_vectors[1])
         self.delta_vectors =  np.array(parser.delta_vectors.value)
         for n, d in enumerate(self.delta_vectors):
@@ -38,11 +39,7 @@ class Geometry:
         self.N_r = N_r = self.model_options.N_r
         self.N_k = N_k = self.model_options.N_k
         self.dangling_bonds = dangling_bonds = self.model_options.dangling_bonds
-
-        parser = self.cell_parser.geometry
-        lattice_vectors = parser.lattice_vectors.value
-        assert(len(lattice_vectors[0]) == self.n_dim)
-
+        assert(len(self.lattice_vectors[0]) == self.n_dim)
         print(f"Building Geometry...")
         self._build_lattice(N_r)
         self._set_connectivity_NN()
@@ -219,7 +216,6 @@ class Geometry:
 
     def _build_brillouine_zone(self, N_k):
         factor = 2
-        a = self.lattice_constant
         a1, a2 = self.a1, self.a2
         A = a1[0]*a2[1] - a1[1]*a2[0]
         b1 = self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])

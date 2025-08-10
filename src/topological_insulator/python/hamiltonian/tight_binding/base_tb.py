@@ -214,7 +214,7 @@ class TightBinding(Notation):
         }
 
     def slater_koster_hoppings(self, geometry:Geometry, idx_i, idx_j, cosines):
-        h = self.cell_parser.geometry.buckling_height.value
+        h = geometry.buckling_height
         a = geometry.lattice_constant
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)

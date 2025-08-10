@@ -2,7 +2,7 @@
     "name":"germanene",
     "source": "Zhu et al., Nano Lett. 15, 7927 (2015)",
     "lattice_constant": 3.86,
-    "buckling": 0.44,
+    "buckling_height": 0.44,
     "eigenvalues": {
         "E_s": -4.20,
         "E_p": 1.70,

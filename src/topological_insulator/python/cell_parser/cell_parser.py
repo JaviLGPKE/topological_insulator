@@ -34,6 +34,7 @@ class CellParser:
     def set_eigenvalues(self):
         g = self.geometry
         g.lattice_constant.value = self.eigenvalue_dict["lattice_constant"]
+        g.buckling_height.value = self.eigenvalue_dict["buckling_height"]
         eigenvalue_dict = self.eigenvalue_dict["eigenvalues"]
         sublattice_labels = self.sublattice_labels
         n_subs = len(g.delta_vectors.value)

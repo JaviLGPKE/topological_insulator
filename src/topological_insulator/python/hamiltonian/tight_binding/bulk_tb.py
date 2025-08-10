@@ -176,7 +176,6 @@ class TightBindingBulk(TightBinding):
 
         kpoints, dist, ticks, labels = [], [0.0], [], []
         cumd = 0.0
-
         for i in range(len(path) - 1):
             label_i, k_i = path[i]
             label_j, k_j = path[i+1]
@@ -191,7 +190,6 @@ class TightBindingBulk(TightBinding):
                     cumd += dk
                 kpoints.append((kx, ky))
                 dist.append(cumd)
-
         ticks.append(cumd)
         labels.append(path[-1][0])
         # drop last dist so that len(dist) == len(kpoints)

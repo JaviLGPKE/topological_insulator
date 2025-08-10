@@ -2,7 +2,7 @@
     "name":"graphene",
     "source": "Castro Neto et al., Rev. Mod. Phys. 81, 109 (2009)",
     "lattice_constant": 2.46,
-    "buckling": 0.00,
+    "buckling_height": 0.00,
     "eigenvalues": {
         "E_s": -2.99,
         "E_p": 3.00,
