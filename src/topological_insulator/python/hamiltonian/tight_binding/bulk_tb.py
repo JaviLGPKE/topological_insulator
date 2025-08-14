@@ -140,7 +140,7 @@ class TightBindingBulk(TightBinding):
                 continue
             # <Psi_{prev,i} | Psi_{current,j}>
             G = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(G) # Cost matrix for assignment
+            cost_matrix = 1 - np.abs(G)
             # Find optimal assignment to maximize total overlap
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
             permutation = col_ind
@@ -148,10 +148,11 @@ class TightBindingBulk(TightBinding):
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
             U_prev = U_k_ordered
-        band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
-        eigenvector_dict = {i: U_ordered[:, :, i] for i in range(N_bands)}
+        band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
+        eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
+            "eigenvector_dict": eigenvector_dict,
             "path": path,
             "ticks": ticks,
             "labels": labels

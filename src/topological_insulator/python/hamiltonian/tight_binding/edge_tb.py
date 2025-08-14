@@ -220,7 +220,7 @@ class TightBindingEdge(TightBinding):
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
-            U_prev = U_k_ordered 
+            U_prev = U_k_ordered
         band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
         eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {
@@ -245,7 +245,7 @@ class TightBindingEdge(TightBinding):
                 E_n = self.band_structure_data["band_dict"][n]
                 if weight > threshold and np.any(np.abs(E_n) > 1e-5):
                     edge_bands.append(n)
-        return sorted(edge_bands)
+        return sorted(np.unique(edge_bands))
 
     def plot_dispersion(self, geometry: Geometry, bands:list = [], edge_bands:list = [],
                         x_max:float=None, x_min:float=None, y_max:float=None, y_min:float=None,

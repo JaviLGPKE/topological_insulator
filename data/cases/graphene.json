@@ -1,15 +1,15 @@
 {
     "name":"graphene",
-    "source": "Castro Neto et al., Rev. Mod. Phys. 81, 109 (2009)",
+    "source": "Tight-binding theory of the spin-orbit coupling in graphene Sergej Konschuh et al. 2010",
     "lattice_constant": 2.46,
     "buckling_height": 0.00,
     "eigenvalues": {
-        "E_s": -2.99,
-        "E_p": 3.00,
-        "t_ss_sigma": -6.76,
+        "E_s": -8.370,
+        "E_p": 0,
+        "t_ss_sigma": -6.77,
         "t_sp_sigma": 5.58,
-        "t_pp_sigma": 8.5,
-        "t_pp_pi": -2.9,
+        "t_pp_sigma": 5.04,
+        "t_pp_pi": -3.03,
         "Delta_pp": 1e-6,
         "lambda_ss": 0,
         "lambda_pp": 1e-6

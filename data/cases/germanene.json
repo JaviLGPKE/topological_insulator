@@ -1,15 +1,15 @@
 {
     "name":"germanene",
-    "source": "Zhu et al., Nano Lett. 15, 7927 (2015)",
+    "source": " Spin orbit coupling induced band gap in gemanene modulated by external field Shasha Li et al. 2019",
     "lattice_constant": 4.02,
     "buckling_height": 0.64,
     "eigenvalues": {
-        "E_s": -5.85,
-        "E_p": 1.50,
-        "t_ss_sigma": -1.25,
-        "t_sp_sigma": 2.30,
-        "t_pp_sigma": 3.40,
-        "t_pp_pi": -0.9,
+        "E_s": -8.02,
+        "E_p": 0,
+        "t_ss_sigma": -1.79,
+        "t_sp_sigma": 2.36,
+        "t_pp_sigma": 4.15,
+        "t_pp_pi": -1.04,
         "Delta_pp": 193.3e-3,
         "lambda_ss": 0,
         "lambda_pp": 46e-3

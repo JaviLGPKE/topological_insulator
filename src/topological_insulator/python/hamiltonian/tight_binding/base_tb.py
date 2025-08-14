@@ -48,7 +48,7 @@ class TightBinding(Notation):
         self.coupled_states = [
             (1/2, +1/2), (1/2, -1/2), (1/2, +1/2), (1/2, -1/2), 
             (3/2, +3/2), (3/2, +1/2), (3/2, -1/2), (3/2, -3/2)
-        ] 
+        ]
         self.C = self._coupled_unitary_transform()
         self.A = self._harmonic_unitary_transform()
         # Parity
@@ -133,7 +133,7 @@ class TightBinding(Notation):
         A = self.A
         M = C @ A
         M_dagger = A.conj().T @ C.conj().T
-        O_coupled = M @ O_uncoupled @ M_dagger.conj()
+        O_coupled = M @ O_uncoupled @ M_dagger
         O_sublattice = np.identity(n=len(self.delta_vectors))
         O = np.kron(O_sublattice, O_coupled)
         return O
@@ -165,7 +165,7 @@ class TightBinding(Notation):
             eigenvalue_dict = self.slater_koster_hoppings(geometry, idx_i, idx_j, cosines)
             H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
             H_coupled = M @ H_cartesian @ M_dagger
-            t_ij_dict[idx_j] = self.hopping_anisotropy(geometry, idx_i, idx_j, H_coupled)
+            t_ij_dict[idx_j] = H_coupled
         # Kane-Mele Spin-Orbit Coupling
         s_ij_dict = {}
         for idx_j in next_neighbour_idxs:
