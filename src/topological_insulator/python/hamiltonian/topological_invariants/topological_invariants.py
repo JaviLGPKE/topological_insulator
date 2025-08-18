@@ -21,7 +21,7 @@ class TopologicalInvariants(Notation):
         self.tight_binding = tight_binding
 
     def get_zak_phase(self, band = 1):
-        assert(self.model_options.location in ["both", "edge"])
+        assert(self.tight_binding.location == "edge")
         geometry = self.geometry
         U_k_dict = self.tight_binding.U_k_dict
         print(f"Calculating Zak Phase...")
@@ -42,7 +42,8 @@ class TopologicalInvariants(Notation):
         else:
             return self.Z2_invariant(bands)
 
-    def Z2_invariant(self, bands=[]):
+    def Z2_invariant(self, bands=[], print_deltas:bool=False):
+        assert(self.tight_binding.location == "bulk")
         print(f"Calculating Z2 Invariant...")
         g, tb = self.geometry, self.tight_binding
         if bands == []:
@@ -63,12 +64,15 @@ class TopologicalInvariants(Notation):
             P_k = pf.pfaffian(w_k)
             delta_i = np.sqrt(w_k_det) / P_k
             deltas.append(np.sign(delta_i.real))
+            if print_deltas:
+                print(f"k={k}: delta = {np.sign(delta_i.real)}")
         total_product = np.prod(deltas)
         Z_2 = int((1 - total_product) / 2) # maps +1 to 0, −1 to 1
         print(f"Z2 Invariant - Done!")
         return Z_2
 
     def abelian_chern_invariant(self, bands, tol):
+        assert(self.tight_binding.location == "bulk")
         band = 0 if bands == [] else bands[0]
         print(f"Calculating Chern Invariant...")
         geometry = self.geometry
@@ -101,7 +105,8 @@ class TopologicalInvariants(Notation):
         return (S / norm)
 
     def get_density_of_states(self,
-                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1):
+        assert(self.tight_binding.location == "edge")
         geometry = self.geometry
         tb = self.tight_binding
         k_edge = geometry.k_edge
@@ -119,7 +124,8 @@ class TopologicalInvariants(Notation):
         return E, DOS
     
     def get_local_density_of_states(self, site_idx:int = 0,
-                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1):
+        assert(self.tight_binding.location == "edge")
         geometry = self.geometry
         tb = self.tight_binding
         k_edge = geometry.k_edge
@@ -137,6 +143,19 @@ class TopologicalInvariants(Notation):
     
     def _lorentz(self, E, E0, eta):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
+
+    def get_acceptor_band_gap(self, only_dE:bool=True):
+        assert(self.tight_binding.location == "bulk")
+        geometry = self.geometry
+        tb = self.tight_binding
+        # NOTE: numpy.linalg.eigh returns eigenvalues in ascending order
+        E_0 = tb.E_k_dict[f"{geometry.K_point}"][-1]
+        E_1 = tb.E_k_dict[f"{geometry.Gamma}"][-3]
+        dE = E_0 - E_1
+        if only_dE:
+            return dE
+        else:
+            return dE, E_0, E_1
     
     def plot_berry_flux(self, F:np.ndarray=None):
         geometry = self.geometry
@@ -168,11 +187,13 @@ class TopologicalInvariants(Notation):
         # ax.plot(E_vals, LDOS, color="k", lw=1.8)
         ax.plot(LDOS, E_vals, color="k", lw=1.8)
         if annotate_max:
-            ax.axhline(E_peak,
-                    color="r",
-                    linestyle='--',
-                    linewidth=1.5,
-                    label=f'Max LDOS at {E_peak:.2f} eV')
+            ax.axhline(
+                E_peak,
+                color="r",
+                linestyle='--',
+                linewidth=1.5,
+                label=f'Max LDOS at {E_peak:.2f} eV'
+            )
         ax.set_ylabel("Energy (eV)", fontsize=12)
         ax.set_xlabel("LDOS (a.u.)", fontsize=12)
         ax.set_title("Local Density of States", fontsize=14)

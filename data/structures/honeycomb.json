@@ -33,6 +33,6 @@
         "lattice_constant": {"value": 1, "space":"position"},
         "lattice_vectors": {"value":[["3/2", "pow(3, 0.5)/2"], ["3/2", "-1*pow(3, 0.5)/2"]], "space":"position"},
         "delta_vectors": {"value":[["0", "0"], ["1", "0"]], "space":"position"},
-        "buckling_height":{"value": 0.0, "space":"position"}
+        "buckling_cosine":{"value": 0.0, "space":"position"}
     }
 }

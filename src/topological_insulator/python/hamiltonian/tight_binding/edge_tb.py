@@ -253,10 +253,8 @@ class TightBindingEdge(TightBinding):
         N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
         if bands == []:
             bands = range(N_bands)
-        # colormap = plt.cm.get_cmap('viridis', N_bands)
         E_list = self.band_structure_data["band_dict"]
         k_vals = self.band_structure_data["path"]
-
         plt.figure(figsize=(10, 8))
         for band in bands:
             E = E_list[band]
@@ -270,7 +268,6 @@ class TightBindingEdge(TightBinding):
             plt.plot(k_vals, E, 
                     color=color, 
                     label=f"Band {band}")
-        
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy (eV)")
         plt.title("Edge Band Structure")

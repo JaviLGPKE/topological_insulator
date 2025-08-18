@@ -25,8 +25,8 @@
         "B": {"value":{
             "onsite_energy":{"B":{"E_s":0, "E_p":0}},
             "nn_hopping":{
-              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0},
-              "C":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0}},
+              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
+              "C":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
             "kane_mele_soc":{
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
@@ -39,8 +39,8 @@
         "C": {"value":{
             "onsite_energy":{"C":{"E_s":0, "E_p":0}},
             "nn_hopping":{
-              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0},
-              "B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0}},
+              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
+              "B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
             "kane_mele_soc":{
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
@@ -55,6 +55,6 @@
     "lattice_constant": {"value": 1, "space":"position"},
     "lattice_vectors": {"value": [["2", "0"], ["1", "pow(3, 0.5)"]], "space": "position"},
     "delta_vectors": {"value": [["0", "0"], ["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"},
-    "buckling_height":{"value": 0.0, "space":"position"}
+    "buckling_cosine":{"value": 0.0, "space":"position"}
   }
 }

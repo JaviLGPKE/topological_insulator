@@ -20,7 +20,7 @@ class Geometry:
         # Vectors
         parser = self.cell_parser.geometry
         self.lattice_constant = parser.lattice_constant.value
-        self.buckling_height = parser.buckling_height.value
+        self.buckling_cosine = parser.buckling_cosine.value
         self.lattice_vectors = lattice_vectors =  parser.lattice_vectors.value
         self.a1, self.a2 = np.array(lattice_vectors[0]), np.array(lattice_vectors[1])
         self.delta_vectors =  np.array(parser.delta_vectors.value)
@@ -221,7 +221,8 @@ class Geometry:
         b1 = self.b1 = (2*np.pi/A) * np.array([a2[1], -a2[0]])
         b2 = self.b2 = (2*np.pi/A) * np.array([-a1[1], a1[0]])
         K_point = self.K_point = ((2*b1 + b2)/3).tolist()
-        trims = self.trims = [np.array([0.0, 0.0]), 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
+        Gamma = self.Gamma = [0.0, 0.0]
+        trims = self.trims = [Gamma, 0.5*b1, 0.5*b2, 0.5*(b1+b2)]
         # Bulk
         if self.model_options.BZ == "reduced":
             discretization = np.linspace(-np.pi, np.pi, N_k)

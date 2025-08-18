@@ -34,7 +34,7 @@ class CellParser:
     def set_eigenvalues(self):
         g = self.geometry
         g.lattice_constant.value = self.eigenvalue_dict["lattice_constant"]
-        g.buckling_height.value = self.eigenvalue_dict["buckling_height"]
+        g.buckling_cosine.value = self.eigenvalue_dict["buckling_cosine"]
         eigenvalue_dict = self.eigenvalue_dict["eigenvalues"]
         sublattice_labels = self.sublattice_labels
         n_subs = len(g.delta_vectors.value)
@@ -53,8 +53,6 @@ class CellParser:
                     parser["nn_hopping"][label_j]["t_sp_sigma"] = eigenvalue_dict["t_sp_sigma"]
                     parser["nn_hopping"][label_j]["t_pp_sigma"] = eigenvalue_dict["t_pp_sigma"]
                     parser["nn_hopping"][label_j]["t_pp_pi"] = eigenvalue_dict["t_pp_pi"]
-                    parser["nn_hopping"][label_j]["delta_heavy"] = eigenvalue_dict["delta"]
-                    parser["nn_hopping"][label_j]["delta_light"] = eigenvalue_dict["delta"]
                 except:
                     pass
                 try:

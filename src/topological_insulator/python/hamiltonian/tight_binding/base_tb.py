@@ -214,8 +214,6 @@ class TightBinding(Notation):
         }
 
     def slater_koster_hoppings(self, geometry:Geometry, idx_i, idx_j, cosines):
-        h = geometry.buckling_height
-        a = geometry.lattice_constant
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
         eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
         nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
@@ -224,7 +222,7 @@ class TightBinding(Notation):
         t_pp_sigma = nn_parser["t_pp_sigma"]
         t_pp_pi = nn_parser["t_pp_pi"]
         l, m = (cosines[0], cosines[1])
-        n = h/a
+        n = geometry.buckling_cosine if geometry.n_sublattices == 2 else 0
         p_cosines = [l, m, n]
         # Hopping Eigenvalues
         eigenvalue_dict = {}
