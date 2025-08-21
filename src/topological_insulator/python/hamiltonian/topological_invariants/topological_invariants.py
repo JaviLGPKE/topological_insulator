@@ -71,7 +71,7 @@ class TopologicalInvariants(Notation):
         print(f"Z2 Invariant - Done!")
         return Z_2
 
-    def abelian_chern_invariant(self, bands, tol):
+    def abelian_chern_invariant(self, bands):
         assert(self.tight_binding.location == "bulk")
         band = 0 if bands == [] else bands[0]
         print(f"Calculating Chern Invariant...")
@@ -81,7 +81,7 @@ class TopologicalInvariants(Notation):
         ky = geometry.ky_bulk
         U_k = self.tight_binding.U_k_dict
         # Berry Curvature
-        F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
+        F = np.zeros((N_k, N_k), dtype=float)
         for i in range(N_k):
             ip = (i + 1) % N_k # periodic BC
             for j in range(N_k):
@@ -90,19 +90,61 @@ class TopologicalInvariants(Notation):
                 u_x = U_k[f"[{kx[ip]}, {ky[j]}]"][:, band]
                 u_y = U_k[f"[{kx[i]}, {ky[jp]}]"][:, band]
                 u_xy = U_k[f"[{kx[ip]}, {ky[jp]}]"][:, band]
-                U_1 = self._phase(np.vdot(u, u_x))
-                U_2 = self._phase(np.vdot(u_x, u_xy))
-                U_3 = self._phase(np.vdot(u_xy, u_y))
-                U_4 = self._phase(np.vdot(u_y, u))
-                # F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4] # NOTE: Debugging
+                U_1 = self._abelian_phase(np.vdot(u, u_x))
+                U_2 = self._abelian_phase(np.vdot(u_x, u_xy))
+                U_3 = self._abelian_phase(np.vdot(u_xy, u_y))
+                U_4 = self._abelian_phase(np.vdot(u_y, u))
                 F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
         print(f"Chern Invariant - Done!")
-        return C, F#, F_dict
-        
-    def _phase(self, S):
+        return C, F
+    
+    def _abelian_phase(self, S):
         norm = np.abs(S)
         return (S / norm)
+    
+    def non_abelian_chern_invariant(self, bands):
+        """
+        Fukui-Hatsugai non-Abelian Chern number for a set of occupied bands.
+        Returns (C, F) where F[i,j] is the flux (radians) on each plaquette and
+        C is the total Chern number (sum(F)/(2*pi)).
+        """
+        assert(self.tight_binding.location == "bulk")
+        print("Calculating non-Abelian Chern Invariant...")
+        geometry = self.geometry
+        N_k = geometry.N_k
+        kx = geometry.kx_bulk
+        ky = geometry.ky_bulk
+        U_k = self.tight_binding.U_k_dict
+        sample_key = f"[{kx[0]}, {ky[0]}]"
+        N_bands = U_k[sample_key].shape[1]
+        N_occ_bands = list(range(N_bands)) if bands == [] else list(bands)
+        F = np.zeros((N_k, N_k), dtype=float)
+        for i in range(N_k):
+            ip = (i + 1) % N_k
+            for j in range(N_k):
+                jp = (j + 1) % N_k
+                U00 = U_k[f"[{kx[i]}, {ky[j]}]"][:, N_occ_bands]
+                U10 = U_k[f"[{kx[ip]}, {ky[j]}]"][:, N_occ_bands]
+                U11 = U_k[f"[{kx[ip]}, {ky[jp]}]"][:, N_occ_bands]
+                U01 = U_k[f"[{kx[i]}, {ky[jp]}]"][:, N_occ_bands]
+                # M_x(k)_{mn} = <u_m(k) | u_n(k+dx)>
+                M1 = np.conj(U00).T @ U10
+                M2 = np.conj(U10).T @ U11
+                M3 = np.conj(U11).T @ U01
+                M4 = np.conj(U01).T @ U00
+                U1 = self._non_abelian_phase(M1)
+                U2 = self._non_abelian_phase(M2)
+                U3 = self._non_abelian_phase(M3)
+                U4 = self._non_abelian_phase(M4)
+                F[i, j] = np.angle( U1 * U2 * U3 * U4)
+        C = F.sum() / (2 * np.pi)
+        print("Non-Abelian Chern Invariant - Done!")
+        return C, F
+    
+    def _non_abelian_phase(M):
+        det = np.linalg.det(M)
+        return det / np.abs(det)
 
     def get_density_of_states(self,
                                  E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1):
@@ -144,13 +186,13 @@ class TopologicalInvariants(Notation):
     def _lorentz(self, E, E0, eta):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
 
-    def get_acceptor_band_gap(self, only_dE:bool=True):
+    def get_band_gap(self, n, m, only_dE:bool=True, ):
         assert(self.tight_binding.location == "bulk")
         geometry = self.geometry
         tb = self.tight_binding
         # NOTE: numpy.linalg.eigh returns eigenvalues in ascending order
-        E_0 = tb.E_k_dict[f"{geometry.K_point}"][-1]
-        E_1 = tb.E_k_dict[f"{geometry.Gamma}"][-3]
+        E_0 = tb.E_k_dict[f"{geometry.K_point}"][n]
+        E_1 = tb.E_k_dict[f"{geometry.Gamma}"][m]
         dE = E_0 - E_1
         if only_dE:
             return dE
