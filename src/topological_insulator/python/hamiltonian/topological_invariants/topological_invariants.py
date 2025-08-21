@@ -142,7 +142,7 @@ class TopologicalInvariants(Notation):
         print("Non-Abelian Chern Invariant - Done!")
         return C, F
     
-    def _non_abelian_phase(M):
+    def _non_abelian_phase(self, M):
         det = np.linalg.det(M)
         return det / np.abs(det)
 

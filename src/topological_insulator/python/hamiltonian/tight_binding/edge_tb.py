@@ -195,32 +195,23 @@ class TightBindingEdge(TightBinding):
             band_dict : reordered energies for each band
             path      : cumulative distance along k-path
         """
-        # Get k-points along the edge path
         k_edge = geometry.k_edge
         keys = [f"{k}" for k in k_edge]
         N_k = len(keys)
         N_bands = len(self.E_k_dict[keys[0]])
         E_ordered = np.zeros((N_k, N_bands))
         U_ordered = np.zeros((N_k, N_bands, N_bands), dtype=complex)
-        U_prev = None
+        permutation = [i for i in range(N_bands)]
         for i, key in enumerate(keys):
             E_k = self.E_k_dict[key]
             U_k = self.U_k_dict[key]
             if i == 0:
                 E_ordered[0, :] = E_k
                 U_ordered[0, :, :] = U_k 
-                U_prev = U_k
                 continue
-            # <Psi_{prev,i} | Psi_{current,j}>
-            G = U_prev.conj().T @ U_k
-            cost = 1 - np.abs(G)
-            # Find optimal assignment to maximize total overlap
-            row_ind, col_ind = linear_sum_assignment(cost)
-            permutation = col_ind
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
-            U_prev = U_k_ordered
         band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
         eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {

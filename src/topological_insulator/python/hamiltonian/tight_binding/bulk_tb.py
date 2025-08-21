@@ -128,7 +128,7 @@ class TightBindingBulk(TightBinding):
         # Band Structure Correction 
         E_ordered = np.zeros((n_k, N_bands))
         U_ordered = np.zeros((n_k, N_bands, N_bands), dtype=complex)
-        U_prev = None
+        permutation = [i for i in range(N_bands)]
         for i, (ix, iy) in enumerate(indices):
             key = f"[{kx_bulk[ix]}, {ky_bulk[iy]}]"
             E_k = E_3d[ix, iy, :]
@@ -136,18 +136,11 @@ class TightBindingBulk(TightBinding):
             if i == 0:
                 E_ordered[0, :] = E_k
                 U_ordered[0, :, :]  = U_k
-                U_prev = U_k
                 continue
-            # <Psi_{prev,i} | Psi_{current,j}>
-            G = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(G)
-            # Find optimal assignment to maximize total overlap
-            row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            permutation = col_ind
+            permutation = [i for i in range(N_bands)]
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
-            U_prev = U_k_ordered
         band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
         eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {
