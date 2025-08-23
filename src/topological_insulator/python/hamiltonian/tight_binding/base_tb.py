@@ -185,6 +185,7 @@ class TightBinding(Notation):
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         H_coupled = M @ H_cartesian @ M_dagger
         u_ij_dict[idx_i] = H_coupled
+        # u_ij_dict[idx_i] = self.occupation_correction(geometry, idx_i, H_coupled)
         # Zeeman-Splitting
         z_ij_dict = {}
         eigenvalue_dict = self.zeeman_splitting(geometry, idx_i)
@@ -256,27 +257,6 @@ class TightBinding(Notation):
                             raise ValueError(f"Not Implemented!")
                         eigenvalue_dict[outer_product] = H_t
         return eigenvalue_dict
-
-    def hopping_anisotropy(self, geometry:Geometry, idx_i, idx_j, H):
-        label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
-        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
-        nn_parser = eigenvalue_parser.value["nn_hopping"][label_j]
-        d_heavy = nn_parser["delta_heavy"]
-        d_light = nn_parser["delta_light"]
-        for i, (j, m_j) in enumerate(self.coupled_states):
-            for n, (k, m_k) in enumerate(self.coupled_states):
-                if j == 3/2 and k == 3/2:
-                    if m_j == 3/2 and m_k == 3/2:
-                        H[i, n] += d_heavy
-                    elif m_j == -3/2 and m_k == -3/2:
-                        H[i, n] += d_heavy
-                    elif m_j == 1/2 and m_k == 1/2:
-                        H[i, n] -= d_light
-                    elif m_j == -1/2 and m_k == -1/2:
-                        H[i, n] -= d_light
-                    else: 
-                        continue
-        return H
 
     def kane_mele_coupling(self, geometry:Geometry, idx_i, idx_j):
         label_i, label_j = geometry.get_label(idx_i), geometry.get_label(idx_j)
@@ -381,9 +361,21 @@ class TightBinding(Notation):
                     H_int += U_p * n_p
                 else: 
                     raise ValueError(f"Not Implemented!")
-                eigenvalue_dict[outer_product] = H_int - E0
+                eigenvalue_dict[outer_product] = H_int #- E0
         return eigenvalue_dict
 
+    def occupation_correction(self, geometry: Geometry, idx_i, H):
+        U = -3
+        label_i = geometry.get_label(idx_i)
+        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+        for i, (j, m_j) in enumerate(self.coupled_states):
+                if j == 3/2 and m_j == -1/2 and label_i == "A":
+                    H[i, i] = U * 0.5
+                elif j == 3/2 and m_j == +1/2 and label_i == "B":
+                    H[i, i] = U * 0.5
+                else:
+                    H[i, i] = 0
+        return H
     def zeeman_splitting(self, geometry:Geometry, site_i):
         # TODO: coupling between spin and orbital i.e. m_l
         eigenvalue_dict = {}
