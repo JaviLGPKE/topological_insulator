@@ -253,6 +253,35 @@ class Geometry:
             else:
                 raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
             self.k_edge = discretization_edge
+            self.BZ_mask = self.brillouin_zone_mask(
+                k_common, k_common, b1, b2, M=2, tol=1e-12)
+    
+    def brillouin_zone_mask(self, kx, ky, b1, b2, M=2, tol=1e-12):
+        """
+        Wigner-Seitz construction of the first BZ i.e.
+        the set of k closer to Gamma(0,0) than any other reciprocal vector.
+
+        returns: boolean mask shape=(len(kx), len(ky)) -> True if k in first BZ.
+        """
+        N_kx = len(kx); N_ky = len(ky)
+        KX, KY = np.meshgrid(kx, ky, indexing='ij')
+        K = np.stack([KX.ravel(), KY.ravel()], axis=1)
+        # build small set of reciprocal lattice points R = m*b1 + n*b2
+        ms = np.arange(-M, M+1)
+        ns = np.arange(-M, M+1)
+        R_list = []
+        for m in ms:
+            for n in ns:
+                R_list.append(m * np.asarray(b1) + n * np.asarray(b2))
+        R = np.vstack(R_list)  # (numR, 2)
+        zero_idx = np.all(np.abs(R) < 1e-12, axis=1)
+        displacements = R[~zero_idx] # don't compare with itself
+        dist0 = np.sum(K**2, axis=1)
+        distR = np.sum((K[:, None, :] - displacements[None, :, :])**2, axis=2)
+        # inside BZ iff dist0 <= all distR
+        inside_flat = np.all(dist0[:, None] <= distR + tol, axis=1)
+        mask = inside_flat.reshape(N_kx, N_ky)
+        return mask
 
     def get_location_idx(self, location:str):
         sites = self.sites
