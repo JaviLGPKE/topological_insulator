@@ -240,7 +240,7 @@ class TightBindingEdge(TightBinding):
 
     def plot_dispersion(self, geometry: Geometry, bands:list = [], edge_bands:list = [],
                         x_max:float=None, x_min:float=None, y_max:float=None, y_min:float=None,
-                        legend: bool = False, hide: bool = True) -> None:
+                        mu:float=None, legend: bool = False, hide: bool = True) -> None:
         N_bands = len(self.sublattice_idxs) * len(self.coupled_states)
         if bands == []:
             bands = range(N_bands)
@@ -259,6 +259,13 @@ class TightBindingEdge(TightBinding):
             plt.plot(k_vals, E, 
                     color=color, 
                     label=f"Band {band}")
+        if mu is not None:
+            plt.axhline(
+                        mu,
+                        color="k",
+                        linestyle='--',
+                        linewidth=1.5,
+                    )
         plt.xlabel(r"$k_{\parallel}$")
         plt.ylabel("Energy (eV)")
         plt.title("Edge Band Structure")
