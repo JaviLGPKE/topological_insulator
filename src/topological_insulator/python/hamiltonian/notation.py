@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 class Notation:
 
     def __init__(self):
+        self.sublattice_labels = ["A", "B", "C", "D", "E", "F"]
         self.direction_index = {'x': 0, 'y': 1, 'z': 2}
         # Spin
         self.n_spins = 2

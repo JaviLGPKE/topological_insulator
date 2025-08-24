@@ -53,6 +53,8 @@ class TightBinding(Notation):
         self.A = self._harmonic_unitary_transform()
         # Parity
         self.O = self._time_reversal_operator()
+        # Minimisation of Free Energy
+        self.E_0 = self.get_E_0(cell_parser)
 
     def _coupled_unitary_transform(self):
         """
@@ -138,6 +140,30 @@ class TightBinding(Notation):
         O = np.kron(O_sublattice, O_coupled)
         return O
 
+    def get_E_0(self, cell_parser):
+        g = cell_parser.geometry
+        n_subs = len(g.delta_vectors.value)
+        subs = self.sublattice_labels[:n_subs]
+        E_0 = 0
+        for i, label_i in enumerate(subs):
+            eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
+            int_parser = eigenvalue_parser.value["interaction"][label_i]
+            U_s = int_parser["U_s"]
+            U_p = int_parser["U_p"]
+            n_s_up, n_s_down = int_parser["n_s_up"], int_parser["n_s_down"]
+            n_px_up, n_px_down = int_parser["n_px_up"], int_parser["n_px_down"]
+            n_py_up, n_py_down = int_parser["n_py_up"], int_parser["n_py_down"]
+            n_pz_up, n_pz_down = int_parser["n_pz_up"], int_parser["n_pz_down"]
+            E_0 += (
+                U_s * n_s_up * n_s_down +
+                U_p * (
+                (n_px_up * n_px_down) + 
+                (n_py_up * n_py_down) + 
+                (n_pz_up * n_pz_down)
+                )
+            )
+        return E_0
+
     @abstractmethod
     def build_hamiltonian(self, geometry:Geometry) -> None:
         """
@@ -185,7 +211,6 @@ class TightBinding(Notation):
         H_cartesian = self._uncoupled_eigenvalue_matrix(eigenvalue_dict)
         H_coupled = M @ H_cartesian @ M_dagger
         u_ij_dict[idx_i] = H_coupled
-        # u_ij_dict[idx_i] = self.occupation_correction(geometry, idx_i, H_coupled)
         # Zeeman-Splitting
         z_ij_dict = {}
         eigenvalue_dict = self.zeeman_splitting(geometry, idx_i)
@@ -339,14 +364,7 @@ class TightBinding(Notation):
             "p_y": (n_py_up, n_py_down),
             "p_z": (n_pz_up, n_pz_down),
         }
-        E0 = (
-            U_s * n_s_up * n_s_down +
-            U_p * (
-            (n_px_up * n_px_down) + 
-            (n_py_up * n_py_down) + 
-            (n_pz_up * n_pz_down)
-            )
-        )
+        E_0 = self.E_0
         eigenvalue_dict = {}
         for sigma in self.spin_dict.values():
             for alpha in self.orbitals:
@@ -361,21 +379,9 @@ class TightBinding(Notation):
                     H_int += U_p * n_p
                 else: 
                     raise ValueError(f"Not Implemented!")
-                eigenvalue_dict[outer_product] = H_int #- E0
+                eigenvalue_dict[outer_product] = H_int - E_0
         return eigenvalue_dict
 
-    def occupation_correction(self, geometry: Geometry, idx_i, H):
-        U = -3
-        label_i = geometry.get_label(idx_i)
-        eigenvalue_parser = getattr(self.cell_parser.eigenvalues, label_i)
-        for i, (j, m_j) in enumerate(self.coupled_states):
-                if j == 3/2 and m_j == -1/2 and label_i == "A":
-                    H[i, i] = U * 0.5
-                elif j == 3/2 and m_j == +1/2 and label_i == "B":
-                    H[i, i] = U * 0.5
-                else:
-                    H[i, i] = 0
-        return H
     def zeeman_splitting(self, geometry:Geometry, site_i):
         # TODO: coupling between spin and orbital i.e. m_l
         eigenvalue_dict = {}
