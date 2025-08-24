@@ -1,11 +1,12 @@
 import numpy as np
 import os
+from scipy.optimize import brentq
 from topological_insulator import Problem
 
 class MeanFieldProblem():
     def __init__(
             self, structure_path, structure_name,
-            Delta_SOC, t, U, delta, occupations=[]
+            Delta_SOC, t, U, delta, occupations=[],
         ):
         self.structure_path = structure_path
         self.structure_name = structure_name
@@ -22,8 +23,8 @@ class MeanFieldProblem():
     # def fitness(self, occupations):
     #     new_occupations = self._objective(occupations)
     #     obj = np.abs(new_occupations - occupations)
-        # with open("results/gs_occupations.txt", "a") as f:
-        #     f.write(" ".join(map(str, new_occupations)) + "\n")
+    #     with open("results/gs_occupations.txt", "a") as f:
+    #         f.write(" ".join(map(str, new_occupations)) + "\n")
     #     penalty = 0
     #     for i in range(self.N_sites):
     #         occupation_i = sum(new_occupations[i*self.N_projections:(i+1)*self.N_projections])
@@ -34,7 +35,7 @@ class MeanFieldProblem():
     #     self.counter += 1
     #     return fitness
 
-    def _objective(self, occupations):
+    def _objective(self, occupations, E_max, E_min, eta, mu_max, mu_min, T = 300, N_e = 2):
         location = self.location
         print("")
         problem = Problem(
@@ -51,10 +52,92 @@ class MeanFieldProblem():
         )
         g = problem.geometry
         tb_bulk = problem.hamiltonian[location]["tight_binding"]
-        occupations_new = self.get_occupations(g, tb_bulk)
-        return occupations_new
+        invariants = problem.hamiltonian["bulk"]["topological_invariants"]
+        E, DOS = self.density_of_states(g, tb_bulk, invariants, E_max, E_min, N_E=1000, eta=eta)
+        mu = self.find_chemical_potential(E, DOS, N_e, T, mu_max, mu_min)
+        occupations_new = self.get_occupations(g, tb_bulk, mu, T)
+        return occupations_new, mu
     
-    def get_occupations(self, g, tb_bulk):
+    def density_of_states(self, g, tb_bulk, invariants, E_max=12, E_min=-2, N_E=1000, eta=0.08):
+        N_projections = len(tb_bulk.coupled_states)
+        N_sites = len(tb_bulk.sublattice_idxs)
+        N_bands = N_sites * N_projections
+        N_k = g.N_k
+        kx = g.kx_bulk
+        ky = g.ky_bulk
+        E = np.linspace(E_min, E_max, N_E)
+        DOS = np.zeros_like(E)
+        self.bz_mask = self.brillouin_zone_mask(kx=kx, ky=ky, b1=g.b1, b2=g.b2, M=2)
+        for ix, k_x in enumerate(kx):
+            for iy, k_y in enumerate(ky):
+                if not self.bz_mask[ix, iy]:
+                    continue
+                key =  f"[{k_x}, {k_y}]"
+                E_k = tb_bulk.E_k_dict[key]
+                for band in range(N_bands):
+                    DOS += invariants._lorentz(E, E_k[band], eta)
+        DOS /= N_k**2
+        return E, DOS
+    
+    def brillouin_zone_mask(self, kx, ky, b1, b2, M=2, tol=1e-12):
+        """
+        Wigner-Seitz construction of the first BZ i.e.
+        the set of k closer to Gamma(0,0) than any other reciprocal vector.
+
+        returns: boolean mask shape=(len(kx), len(ky)) -> True if k in first BZ.
+        """
+        N_kx = len(kx); N_ky = len(ky)
+        KX, KY = np.meshgrid(kx, ky, indexing='ij')
+        K = np.stack([KX.ravel(), KY.ravel()], axis=1)
+        # build small set of reciprocal lattice points R = m*b1 + n*b2
+        ms = np.arange(-M, M+1)
+        ns = np.arange(-M, M+1)
+        R_list = []
+        for m in ms:
+            for n in ns:
+                R_list.append(m * np.asarray(b1) + n * np.asarray(b2))
+        R = np.vstack(R_list)  # (numR, 2)
+        zero_idx = np.all(np.abs(R) < 1e-12, axis=1)
+        displacements = R[~zero_idx] # don't compare with itself
+        dist0 = np.sum(K**2, axis=1)
+        distR = np.sum((K[:, None, :] - displacements[None, :, :])**2, axis=2)
+        # inside BZ iff dist0 <= all distR
+        inside_flat = np.all(dist0[:, None] <= distR + tol, axis=1)
+        mask = inside_flat.reshape(N_kx, N_ky)
+        return mask
+
+    def find_chemical_potential(self, E, DOS, N_e, T=300, mu_max=10, mu_min=5):
+        """
+        Solve for chemical potential mu such that the integrated number of electrons matches nelecs.
+
+        energies : 1d array (sorted ascending)
+        dos      : 1d array, same length, DOS(E)
+        nelecs   : target total number of electrons
+        T        : temperature in Kelvin
+        mu_min, mu_max : search bracket. If None, use energy bounds.
+        """
+        if mu_min is None:
+            mu_min = min(E) - 10.0  # below the lowest energy
+        if mu_max is None:
+            mu_max = max(E) + 10.0  #  above the highest energy
+        objective = lambda mu: self._estimate_N_e(E, DOS, mu, T) - N_e
+        mu, result = brentq(objective, mu_min, mu_max, full_output=True)
+        if not result.converged:
+            raise RuntimeError("Chemical potential solver did not converge.")
+        return mu
+    
+    def _estimate_N_e(self, E, DOS, mu, T):
+        return np.trapezoid(DOS * self._fermi_dirac_distribution(E, mu, T), E)
+
+    def _fermi_dirac_distribution(self, E, mu, T):
+        k_B = 8.617333262e-5  # eV/K (Boltzmann constant)
+        beta = 1.0 / (k_B * T)
+        if T <= 0.0:
+            return (E <= mu).astype(float)
+        else:
+            return 1.0 / (np.exp((E - mu)*beta) + 1.0)
+
+    def get_occupations(self, g, tb_bulk, mu, T):
         M = tb_bulk.C @ tb_bulk.A
         M_sub = np.kron(np.eye(self.N_sites), M.conj().T)
         N_projections = len(tb_bulk.coupled_states)
@@ -64,14 +147,21 @@ class MeanFieldProblem():
         kx = g.kx_bulk
         ky = g.ky_bulk
         occupations = np.zeros(N_bands)
-        for i in range(N_k):
-            for j in range(N_k):
-                key = f"[{kx[i]}, {ky[j]}]"
+        for ix, k_x in enumerate(kx):
+            for iy, k_y in enumerate(ky):
+                if not self.bz_mask[ix, iy]:
+                    continue
+                key =  f"[{k_x}, {k_y}]"
                 U_k = tb_bulk.U_k_dict[key]
-                c = M_sub @ U_k[:, N_bands-1]
-                occupations += np.abs(c)**2  # accumulate per orbital & spin
+                E_k = tb_bulk.E_k_dict[key]
+                for band in range(N_bands):
+                    E_k_m = E_k[band]
+                    c_k_m = M_sub @ U_k[:, band]
+                    occupations += (
+                        np.abs(c_k_m)**2 * self._fermi_dirac_distribution(E_k_m, mu, T)
+                    )
         occupations /= (N_k**2)
-        return 
+        return occupations
 
     def _set_eigenvalues(self, problem:Problem, occupations):
         sublattice_labels = ["A", "B", "C", "D", "E", "F"]
