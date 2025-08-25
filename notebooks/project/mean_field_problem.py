@@ -1,12 +1,12 @@
 import numpy as np
 import os
-from scipy.optimize import brentq
+from scipy.optimize import brentq, minimize, basinhopping
 from topological_insulator import Problem
 
 class MeanFieldProblem():
     def __init__(
             self, structure_path, structure_name,
-            Delta_SOC, t, U, delta, occupations=[],
+            Delta_SOC, t, U, delta, occupations=[]
         ):
         self.structure_path = structure_path
         self.structure_name = structure_name
@@ -14,19 +14,38 @@ class MeanFieldProblem():
         self.t = t
         self.U = U
         self.delta = delta
-        self.occupations = np.array(occupations)
+        self.occupations_ini = np.array(occupations)
         self.N_projections = 8
         self.N_sites = len(occupations)//self.N_projections
         self.location = "bulk"
         self.counter = 0
         self.k_B = 8.617333262e-5  # eV/K (Boltzmann constant)
 
-    def fitness(self, occupations):
-        F = self._objective(occupations)
-        # TODO:
-        return F
+    def run(self, N_h=2, T=300, E_max=10, E_min=1, eta= 0.08, mu_max=10, mu_min=1):
+        N_occ = len(self.occupations_ini)
+        lower, upper = 0, 1
+        bounds = [(lower, upper)] * N_occ
+        x0 = np.zeros(N_occ)
+        x0 += 1e-3 * np.random.randn(N_occ)
+        minimizer_kwargs = {"method": "L-BFGS-B", "bounds": bounds, "options": {"ftol": 1e-3}}
+        print("Global Optimization...")
+        bh = basinhopping(
+            lambda x: self._objective(x, E_max, E_min, eta, mu_max, mu_min, T, N_h),
+            x0, niter=20, minimizer_kwargs=minimizer_kwargs, stepsize=0.05) # global
+        print("Global Optimization - Done")
+        self.counter = 0
+        print("Local Optimization...")
+        res_local = minimize(
+            lambda x: self._objective(x, E_max, E_min, eta, mu_max, mu_min, T, N_h),
+            bh.x, method="L-BFGS-B", bounds=bounds, 
+            options={"maxiter": 100, "ftol": 1e-4})  # local
+        print("Local Optimization - Done")
+        occupations = res_local.x
+        F = res_local.fun
+        return occupations, F
 
-    def _objective(self, occupations, E_max, E_min, eta, mu_max, mu_min, T = 300, N_e = 2):
+    def _objective(self, occupations, E_max, E_min, eta, mu_max, mu_min, T = 300, N_h = 2):
+        print(f"Iteration: {self.counter}")
         location = self.location
         print("")
         problem = Problem(
@@ -47,9 +66,10 @@ class MeanFieldProblem():
         E, DOS = self.density_of_states(g, tb_bulk, invariants, E_max, E_min, N_E=1000, eta=eta)
         mu_min = np.min(E) 
         mu_max = np.max(E)
-        mu = self.find_chemical_potential(E, DOS, N_e, T, mu_max, mu_min)
-        occupations_new = self.get_occupations(g, tb_bulk, E, mu, T)
-        return occupations_new, mu
+        mu = self.find_chemical_potential(E, DOS, N_h, T, mu_max, mu_min)
+        # occupations_new = self.get_occupations(g, tb_bulk, E, mu, T)
+        self.counter += 1
+        return self.helmholtz_free_energy(g, tb_bulk, E, mu, T)
     
     def density_of_states(self, g, tb_bulk, invariants, E_max=12, E_min=-2, N_E=1000, eta=0.08):
         N_projections = len(tb_bulk.coupled_states)
@@ -127,6 +147,32 @@ class MeanFieldProblem():
                     )
         occupations /= self.N_k_BZ
         return occupations
+    
+    def helmholtz_free_energy(self, g, tb_bulk, E, mu, T):
+        E_max, E_min = max(E), min(E)
+        kx = g.kx_bulk
+        ky = g.ky_bulk
+        N_bands = len(next(iter(tb_bulk.E_k_dict.values())))
+        E_band_sum = 0.0
+        S_sum = 0.0
+        Nk = 0
+        for ix, k_x in enumerate(kx):
+            for iy, k_y in enumerate(ky):
+                if not g.BZ_mask[ix, iy]:
+                    continue
+                key = f"[{k_x}, {k_y}]"
+                E_k = tb_bulk.E_k_dict[key]
+                for band in range(N_bands):
+                    E_k_m = E_k[band]
+                    if E_k_m > E_max or E_k_m < E_min:
+                        continue
+                    f_E = self._fermi_dirac_distribution(E_k_m, mu, T)
+                    E_band_sum += E_k_m * f_E
+                    if T !=0:
+                        S_sum += - (f_E * np.log(f_E) + (1 - f_E) * np.log(1 - f_E))
+        E_band = E_band_sum / self.N_k_BZ
+        S = self.k_B * (S_sum / self.N_k_BZ)
+        return E_band - (T * S)
 
     def _set_eigenvalues(self, problem:Problem, occupations):
         sublattice_labels = ["A", "B", "C", "D", "E", "F"]
@@ -156,7 +202,7 @@ class MeanFieldProblem():
                     pass
 
     def get_bounds(self):
-        n = len(self.occupations)
+        n = len(self.occupations_ini)
         return ([0]*n, [1]*n)
 
     def get_nec(self):
@@ -167,7 +213,5 @@ class MeanFieldProblem():
         return 0
     
     def get_nobj(self):
-        n = len(self.occupations)
-        N_sites = n//self.N_projections
-        return len(self.occupations)
+        return 1
 
