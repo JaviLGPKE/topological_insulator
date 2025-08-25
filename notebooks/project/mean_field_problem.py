@@ -21,20 +21,10 @@ class MeanFieldProblem():
         self.counter = 0
         self.k_B = 8.617333262e-5  # eV/K (Boltzmann constant)
 
-    # def fitness(self, occupations):
-    #     new_occupations = self._objective(occupations)
-    #     obj = np.abs(new_occupations - occupations)
-    #     with open("results/gs_occupations.txt", "a") as f:
-    #         f.write(" ".join(map(str, new_occupations)) + "\n")
-    #     penalty = 0
-    #     for i in range(self.N_sites):
-    #         occupation_i = sum(new_occupations[i*self.N_projections:(i+1)*self.N_projections])
-    #         if not np.isclose(occupation_i, 1):
-    #             penalty += np.inf
-    #     fitness = obj + penalty
-    #     print(self.counter)
-    #     self.counter += 1
-    #     return fitness
+    def fitness(self, occupations):
+        F = self._objective(occupations)
+        # TODO:
+        return F
 
     def _objective(self, occupations, E_max, E_min, eta, mu_max, mu_min, T = 300, N_e = 2):
         location = self.location
@@ -55,10 +45,9 @@ class MeanFieldProblem():
         tb_bulk = problem.hamiltonian[location]["tight_binding"]
         invariants = problem.hamiltonian["bulk"]["topological_invariants"]
         E, DOS = self.density_of_states(g, tb_bulk, invariants, E_max, E_min, N_E=1000, eta=eta)
-        E_h = -E
-        mu_min = np.min(E_h) - 10
-        mu_max = np.max(E_h) + 10
-        mu = self.find_chemical_potential(E_h, DOS, N_e, T, mu_max, mu_min)
+        mu_min = np.min(E) 
+        mu_max = np.max(E)
+        mu = self.find_chemical_potential(E, DOS, N_e, T, mu_max, mu_min)
         occupations_new = self.get_occupations(g, tb_bulk, E, mu, T)
         return occupations_new, mu
     
@@ -93,14 +82,14 @@ class MeanFieldProblem():
         T        : temperature in Kelvin
         mu_min, mu_max : search bracket. If None, use energy bounds.
         """
-        objective = lambda mu: N_h + self._estimate_N_e(E, DOS, mu, T)
+        objective = lambda mu: self._estimate_N_h(E, DOS, mu, T) - N_h
         mu, result = brentq(objective, mu_min, mu_max, full_output=True)
         if not result.converged:
             raise RuntimeError("Chemical potential solver did not converge.")
-        return -mu # hole chemical potential
+        return mu
     
-    def _estimate_N_e(self, E, DOS, mu, T):
-        y = DOS * self._fermi_dirac_distribution(E, mu, T)
+    def _estimate_N_h(self, E, DOS, mu, T):
+        y = DOS * (1-self._fermi_dirac_distribution(E, mu, T))
         x = E
         return np.trapezoid(y, x)
 
@@ -123,7 +112,7 @@ class MeanFieldProblem():
         occupations = np.zeros(N_bands)
         for ix, k_x in enumerate(kx):
             for iy, k_y in enumerate(ky):
-                if not self.BZ_mask[ix, iy]:
+                if not g.BZ_mask[ix, iy]:
                     continue
                 key =  f"[{k_x}, {k_y}]"
                 U_k = tb_bulk.U_k_dict[key]
@@ -136,7 +125,7 @@ class MeanFieldProblem():
                     occupations += (
                         np.abs(c_k_m)**2 * self._fermi_dirac_distribution(E_k_m, mu, T)
                     )
-        occupations /= g.N_k_BZ
+        occupations /= self.N_k_BZ
         return occupations
 
     def _set_eigenvalues(self, problem:Problem, occupations):
@@ -148,14 +137,15 @@ class MeanFieldProblem():
         for i, label_i in enumerate(subs):
             parser = getattr(problem.cell_parser.eigenvalues, label_i).value
             # Diagonal Values
+            base = i * self.N_projections 
             parser["chadi_soc"][label_i]["Delta_pp"] = self.Delta_SOC
             parser["interaction"][label_i]["U_p"] = self.U
-            parser["interaction"][label_i]["n_px_up"] = occupations[(2)*(i+1)]
-            parser["interaction"][label_i]["n_px_down"] = occupations[(3)*(i+1)]
-            parser["interaction"][label_i]["n_py_up"] = occupations[(4)*(i+1)]
-            parser["interaction"][label_i]["n_py_down"] = occupations[(5)*(i+1)]
-            parser["interaction"][label_i]["n_pz_up"] = occupations[(6)*(i+1)]
-            parser["interaction"][label_i]["n_pz_down"] = occupations[(7)*(i+1)]
+            parser["interaction"][label_i]["n_px_up"] = occupations[2+base]
+            parser["interaction"][label_i]["n_px_down"] = occupations[3+base]
+            parser["interaction"][label_i]["n_py_up"] = occupations[4+base]
+            parser["interaction"][label_i]["n_py_down"] = occupations[5+base]
+            parser["interaction"][label_i]["n_pz_up"] = occupations[6+base]
+            parser["interaction"][label_i]["n_pz_down"] = occupations[7+base]
             # Off-Diagonal Values
             for label_j in subs:
                 # Hoppings

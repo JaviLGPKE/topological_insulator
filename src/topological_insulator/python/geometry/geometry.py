@@ -240,6 +240,8 @@ class Geometry:
         self.kx_bulk = self.ky_bulk = k_common
         self.N_k = len(k_common)
         self.kx_grid, self.ky_grid = np.meshgrid(k_common, k_common, indexing='xy')
+        self.BZ_mask = self.brillouin_zone_mask(
+                k_common, k_common, b1, b2, M=2, tol=1e-12)
         # Edge
         if self.model_options.location in ["edge", "both"]:
             T = a1 if a2[1] > a1[1] else a2
@@ -253,8 +255,6 @@ class Geometry:
             else:
                 raise NotImplementedError(f"'{self.model_options.BZ}' Not Implemented!")
             self.k_edge = discretization_edge
-            self.BZ_mask = self.brillouin_zone_mask(
-                k_common, k_common, b1, b2, M=2, tol=1e-12)
     
     def brillouin_zone_mask(self, kx, ky, b1, b2, M=2, tol=1e-12):
         """

@@ -216,29 +216,33 @@ class TopologicalInvariants(Notation):
         plt.show()
 
     def plot_density_of_states(self, E_vals: np.ndarray,
-                            LDOS: np.ndarray,
+                            DOS: np.ndarray,
                             figsize: tuple = (8, 7),
-                            annotate_max: bool = True):
+                            annotate_max: bool = True,
+                            xlabel:str = "LDOS"):
         """
-        Plot LDOS vs. energy and, optionally, mark the energy at which LDOS is maximal,
+        Plot LDOS/DOS vs. energy and, optionally, mark the energy at which LDOS is maximal,
         all on the same axes.
         """
-        idx_max = np.argmax(LDOS)
+        idx_max = np.argmax(DOS)
         E_peak = E_vals[idx_max]
         fig, ax = plt.subplots(figsize=figsize)
         # ax.plot(E_vals, LDOS, color="k", lw=1.8)
-        ax.plot(LDOS, E_vals, color="k", lw=1.8)
+        ax.plot(DOS, E_vals, color="k", lw=1.8)
         if annotate_max:
             ax.axhline(
                 E_peak,
                 color="r",
                 linestyle='--',
                 linewidth=1.5,
-                label=f'Max LDOS at {E_peak:.2f} eV'
+                label=f'Max {xlabel} at {E_peak:.2f} eV'
             )
         ax.set_ylabel("Energy (eV)", fontsize=12)
-        ax.set_xlabel("LDOS (a.u.)", fontsize=12)
-        ax.set_title("Local Density of States", fontsize=14)
+        ax.set_xlabel(f"{xlabel} (a.u.)", fontsize=12)
+        if xlabel == "LDOS":
+            ax.set_title("Local Density of States", fontsize=14)
+        else:
+            ax.set_title("Total Density of States", fontsize=14)
         ax.legend(frameon=True)
         ax.grid(True, ls=':', alpha=0.6)
 
