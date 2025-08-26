@@ -83,20 +83,21 @@ class MeanFieldProblem():
         Solve for chemical potential mu such that the integrated number of electrons matches N_h.
         """
         objective = lambda mu: self._estimate_N_h(E, DOS, mu, T) - N_h
-        res = minimize_scalar(objective, bounds=(mu_min, mu_max), method='bounded',
-                          options={'xatol':1e-6})
-        if not res.success:
-            raise RuntimeError("minimize_scalar failed: " + getattr(res, "message", "no message"))
-        mu = float(res.x)
-        try:
-            a = max(mu_min, mu - 1.0)
-            b = min(mu_max, mu + 1.0)
-            fa = self._estimate_N_h(E, DOS, a, T) - N_h
-            fb = self._estimate_N_h(E, DOS, b, T) - N_h
-            if fa * fb <= 0:
-                mu = float(brentq(lambda m: self._estimate_N_h(E, DOS, m, T) - N_h, a, b))
-        except Exception:
-            pass
+        # res = minimize_scalar(objective, bounds=(mu_min, mu_max), method='bounded',
+        #                   options={'xatol':1e-6})
+        # if not res.success:
+        #     raise RuntimeError("minimize_scalar failed: " + getattr(res, "message", "no message"))
+        # mu = float(res.x)
+        # try:
+        #     a = max(mu_min, mu - 1.0)
+        #     b = min(mu_max, mu + 1.0)
+        #     fa = self._estimate_N_h(E, DOS, a, T) - N_h
+        #     fb = self._estimate_N_h(E, DOS, b, T) - N_h
+        #     if fa * fb <= 0:
+        #         mu = float(brentq(lambda m: self._estimate_N_h(E, DOS, m, T) - N_h, a, b))
+        # except Exception:
+        #     pass
+        mu, result = brentq(objective, mu_min, mu_max, full_output=True)
         return mu
     
     def _estimate_N_h(self, E, DOS, mu, T):
