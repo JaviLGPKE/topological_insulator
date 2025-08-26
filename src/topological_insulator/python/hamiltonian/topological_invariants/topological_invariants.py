@@ -123,6 +123,8 @@ class TopologicalInvariants(Notation):
         for i in range(N_k):
             ip = (i + 1) % N_k
             for j in range(N_k):
+                if not geometry.BZ_mask[i, j]:
+                    continue
                 jp = (j + 1) % N_k
                 U00 = U_k[f"[{kx[i]}, {ky[j]}]"][:, N_occ_bands]
                 U10 = U_k[f"[{kx[ip]}, {ky[j]}]"][:, N_occ_bands]
