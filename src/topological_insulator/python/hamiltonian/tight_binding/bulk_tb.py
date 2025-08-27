@@ -114,45 +114,41 @@ class TightBindingBulk(TightBinding):
             ticks     : positions for labels
             labels    : high-symmetry labels
         """
-        kpoints, path, ticks, labels = self._build_high_symmetry_path(geometry)
-        kx_grid, ky_grid = geometry.kx_bulk, geometry.ky_bulk
-        E_3d = self._reshape_Ek_into_grid(kx_grid, ky_grid)
+        k_bulk, path, ticks, labels = self._build_high_symmetry_path(geometry)
+        kx_bulk, ky_bulk = geometry.kx_bulk, geometry.ky_bulk
+        E_3d = self._reshape_Ek_into_grid(kx_bulk, ky_bulk)
         # Find grid indices for each k-point in the path
         indices = []
-        for (kx, ky) in kpoints:
-            ix = np.argmin(np.abs(kx_grid - kx))
-            iy = np.argmin(np.abs(ky_grid - ky))
+        for (kx, ky) in k_bulk:
+            ix = np.argmin(np.abs(kx_bulk - kx))
+            iy = np.argmin(np.abs(ky_bulk - ky))
             indices.append((ix, iy))
         n_k = len(indices)
         N_bands = E_3d.shape[2]
         # Band Structure Correction 
         E_ordered = np.zeros((n_k, N_bands))
         U_ordered = np.zeros((n_k, N_bands, N_bands), dtype=complex)
-        U_prev = None
+        permutation = [i for i in range(N_bands)]
         for i, (ix, iy) in enumerate(indices):
-            key = f"[{kx_grid[ix]}, {ky_grid[iy]}]"
+            key = f"[{kx_bulk[ix]}, {ky_bulk[iy]}]"
             E_k = E_3d[ix, iy, :]
             U_k = self.U_k_dict[key]
             if i == 0:
                 E_ordered[0, :] = E_k
                 U_ordered[0, :, :]  = U_k
-                U_prev = U_k
                 continue
-            # <Psi_{prev,i} | Psi_{current,j}>
-            G = U_prev.conj().T @ U_k
-            cost_matrix = 1 - np.abs(G) # Cost matrix for assignment
-            # Find optimal assignment to maximize total overlap
-            row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            permutation = col_ind
+            permutation = [i for i in range(N_bands)]
             E_ordered[i, :] = E_k[permutation]
             U_k_ordered = U_k[:, permutation]
             U_ordered[i] = U_k_ordered
-            U_prev = U_k_ordered
-        band_dict = {i: E_ordered[:, i] for i in range(N_bands)}
-        eigenvector_dict = {i: U_ordered[:, i, :] for i in range(N_bands)}
+        band_dict = {n: E_ordered[:, n] for n in range(N_bands)}
+        eigenvector_dict = {n: U_ordered[:, :, n] for n in range(N_bands)}
         self.band_structure_data = {
             "band_dict": band_dict,
+            "eigenvector_dict": eigenvector_dict,
             "path": path,
+            "k_bulk": k_bulk,
+            "indices": indices,
             "ticks": ticks,
             "labels": labels
         }
@@ -176,7 +172,6 @@ class TightBindingBulk(TightBinding):
 
         kpoints, dist, ticks, labels = [], [0.0], [], []
         cumd = 0.0
-
         for i in range(len(path) - 1):
             label_i, k_i = path[i]
             label_j, k_j = path[i+1]
@@ -191,7 +186,6 @@ class TightBindingBulk(TightBinding):
                     cumd += dk
                 kpoints.append((kx, ky))
                 dist.append(cumd)
-
         ticks.append(cumd)
         labels.append(path[-1][0])
         # drop last dist so that len(dist) == len(kpoints)
@@ -210,7 +204,8 @@ class TightBindingBulk(TightBinding):
                 E_3d[ix, iy, :] = self.E_k_dict[f"[{kx}, {ky}]"]
         return E_3d
 
-    def plot_band_structure(self, geometry:Geometry, bands:list = [], hide:bool=True):
+    def plot_band_structure(self, geometry:Geometry, bands:list = [], 
+                            energies:list = [], hide:bool=True):
         """
         Plot all bands whose energies are non-zero at all k-points.
         """
@@ -220,17 +215,22 @@ class TightBindingBulk(TightBinding):
         ticks = self.band_structure_data["ticks"]
         labels = self.band_structure_data["labels"]
         N_bands = len(band_dict)
-        cmap = plt.cm.viridis
-        colors = cmap(np.linspace(0, 1, N_bands))
         if bands == []:
             bands = [i for i in range(N_bands)]
-        for idx, energies in band_dict.items():
+        for idx, eigenvalues in band_dict.items():
             if idx not in bands:
                 continue
-            if hide and np.all(np.abs(energies) < 1e-8):
+            if hide and np.all(np.abs(eigenvalues) < 1e-8):
                 continue
-            ax.plot(path, energies, lw=1.5, color=colors[idx])
-
+            ax.plot(path, eigenvalues, lw=1.5, color="b")
+        if energies != []:
+            for E in energies:
+                ax.axhline(
+                    E,
+                    color="k",
+                    linestyle='--',
+                    linewidth=1.5,
+                )
         ax.set_xticks(ticks)
         ax.set_xticklabels(labels)
         ax.set_xlim(path[0], path[-1])

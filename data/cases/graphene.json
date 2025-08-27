@@ -1,0 +1,17 @@
+{
+    "name":"graphene",
+    "source": "Tight-binding theory of the spin-orbit coupling in graphene Sergej Konschuh et al. 2010",
+    "lattice_constant": 2.46,
+    "buckling_cosine": 0.00,
+    "eigenvalues": {
+        "E_s": -8.55,
+        "E_p": 0,
+        "t_ss_sigma": -6.77,
+        "t_sp_sigma": 5.58,
+        "t_pp_sigma": 5.04,
+        "t_pp_pi": -3.03,
+        "Delta_pp": 9e-3,
+        "lambda_ss": 0,
+        "lambda_pp": 1e-6
+    }
+}

@@ -17,7 +17,7 @@
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-              "chadi_soc":{"A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
+             "chadi_soc":{"A": {"Delta_ss": 0, "Delta_sp": 0, "Delta_pp": 0}},
               "interaction":{"A":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
                 "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
             }, "unit":"eV"
@@ -25,13 +25,13 @@
         "B": {"value":{
             "onsite_energy":{"B":{"E_s":0, "E_p":0}},
             "nn_hopping":{
-              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0},
-              "C":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0}},
+              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
+              "C":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
             "kane_mele_soc":{
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-              "chadi_soc":{"B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
+              "chadi_soc":{"B": {"Delta_ss": 0, "Delta_sp": 0, "Delta_pp": 0}},
               "interaction":{"B":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
                 "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
             }, "unit":"eV"
@@ -39,13 +39,13 @@
         "C": {"value":{
             "onsite_energy":{"C":{"E_s":0, "E_p":0}},
             "nn_hopping":{
-              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0},
-              "B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0, "delta_heavy":0, "delta_light":0}},
+              "A": {"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0},
+              "B":{"t_ss_sigma": 0, "t_sp_sigma": 0,"t_pp_sigma": 0, "t_pp_pi": 0}},
             "kane_mele_soc":{
               "A": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "B": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0},
               "C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
-              "chadi_soc":{"C": {"lambda_ss": 0, "lambda_sp": 0, "lambda_pp": 0}},
+              "chadi_soc":{"C": {"Delta_ss": 0, "Delta_sp": 0, "Delta_pp": 0}},
               "interaction":{"C":{"U_s":0, "U_p":0, "n_s_up": 0, "n_s_down":0, "n_px_up":0, "n_px_down":0, 
                 "n_py_up":0, "n_py_down":0, "n_pz_up":0, "n_pz_down":0}}
             }, "unit":"eV"
@@ -54,6 +54,7 @@
   "geometry": {
     "lattice_constant": {"value": 1, "space":"position"},
     "lattice_vectors": {"value": [["2", "0"], ["1", "pow(3, 0.5)"]], "space": "position"},
-    "delta_vectors": {"value": [["0", "0"], ["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"}
+    "delta_vectors": {"value": [["0", "0"], ["1", "0"], ["1/2", "pow(3, 0.5)/2"]], "space": "position"},
+    "buckling_cosine":{"value": 0.0, "space":"position"}
   }
 }

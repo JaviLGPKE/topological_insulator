@@ -27,12 +27,12 @@ class Problem:
         assert(N_r >= 10)
         # Model Options
         self.model_options = ModelOptions(N_r, N_k, location, BZ, dangling_bonds)
+        if self.cell_parser.eigenvalue_dict is not None:
+            self.cell_parser.set_eigenvalues()
         # Geometry
         self.geometry = Geometry(model_options=self.model_options, cell_parser=self.cell_parser)
         self.geometry.build_lattice()
         # Hamiltonian
-        if self.cell_parser.eigenvalue_dict is not None:
-            self.cell_parser.set_eigenvalues()
         for key in self.hamiltonian.keys():
             # Tight-Binding Approximation
             if location not in [key, "both"]:

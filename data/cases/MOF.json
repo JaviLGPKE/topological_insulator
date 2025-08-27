@@ -1,0 +1,17 @@
+{
+    "name": "p-orbital honeycomb-Kagome lattice",
+    "source": "Based on TB parameters from the paper: eigenvalues and hopping terms",
+    "lattice_constant": 1.0,
+    "buckling_cosine": 0.0,
+    "eigenvalues": {
+    "E_s": 0.0,
+    "E_p": 0.0,
+    "t_ss_sigma": 0,
+    "t_sp_sigma": 0,
+    "t_pp_sigma": 0.0,
+    "t_pp_pi": 0.0,
+    "Delta_pp": 0.0,
+    "lambda_ss": 0.0,
+    "lambda_pp": 0.0
+    }
+}

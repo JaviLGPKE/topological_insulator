@@ -21,7 +21,7 @@ class TopologicalInvariants(Notation):
         self.tight_binding = tight_binding
 
     def get_zak_phase(self, band = 1):
-        assert(self.model_options.location in ["both", "edge"])
+        assert(self.tight_binding.location == "edge")
         geometry = self.geometry
         U_k_dict = self.tight_binding.U_k_dict
         print(f"Calculating Zak Phase...")
@@ -42,7 +42,8 @@ class TopologicalInvariants(Notation):
         else:
             return self.Z2_invariant(bands)
 
-    def Z2_invariant(self, bands=[]):
+    def Z2_invariant(self, bands=[], print_deltas:bool=False):
+        assert(self.tight_binding.location == "bulk")
         print(f"Calculating Z2 Invariant...")
         g, tb = self.geometry, self.tight_binding
         if bands == []:
@@ -63,12 +64,15 @@ class TopologicalInvariants(Notation):
             P_k = pf.pfaffian(w_k)
             delta_i = np.sqrt(w_k_det) / P_k
             deltas.append(np.sign(delta_i.real))
+            if print_deltas:
+                print(f"k={k}: delta = {np.sign(delta_i.real)}")
         total_product = np.prod(deltas)
         Z_2 = int((1 - total_product) / 2) # maps +1 to 0, −1 to 1
         print(f"Z2 Invariant - Done!")
         return Z_2
 
-    def abelian_chern_invariant(self, bands, tol):
+    def abelian_chern_invariant(self, bands):
+        assert(self.tight_binding.location == "bulk")
         band = 0 if bands == [] else bands[0]
         print(f"Calculating Chern Invariant...")
         geometry = self.geometry
@@ -77,7 +81,7 @@ class TopologicalInvariants(Notation):
         ky = geometry.ky_bulk
         U_k = self.tight_binding.U_k_dict
         # Berry Curvature
-        F, F_dict = np.zeros((N_k, N_k), dtype=float), {}
+        F = np.zeros((N_k, N_k), dtype=float)
         for i in range(N_k):
             ip = (i + 1) % N_k # periodic BC
             for j in range(N_k):
@@ -86,48 +90,120 @@ class TopologicalInvariants(Notation):
                 u_x = U_k[f"[{kx[ip]}, {ky[j]}]"][:, band]
                 u_y = U_k[f"[{kx[i]}, {ky[jp]}]"][:, band]
                 u_xy = U_k[f"[{kx[ip]}, {ky[jp]}]"][:, band]
-                U_1 = self._phase(np.vdot(u, u_x))
-                U_2 = self._phase(np.vdot(u_x, u_xy))
-                U_3 = self._phase(np.vdot(u_xy, u_y))
-                U_4 = self._phase(np.vdot(u_y, u))
-                # F_dict[f"{i}, {j}"] = [U_1, U_2, U_3, U_4] # NOTE: Debugging
+                U_1 = self._abelian_phase(np.vdot(u, u_x))
+                U_2 = self._abelian_phase(np.vdot(u_x, u_xy))
+                U_3 = self._abelian_phase(np.vdot(u_xy, u_y))
+                U_4 = self._abelian_phase(np.vdot(u_y, u))
                 F[i, j] = np.angle(U_1 * U_2 * U_3 * U_4)
         C = F.sum() / (2 * np.pi)
         print(f"Chern Invariant - Done!")
-        return C, F#, F_dict
-        
-    def _phase(self, S):
+        return C, F
+    
+    def _abelian_phase(self, S):
         norm = np.abs(S)
         return (S / norm)
+    
+    def non_abelian_chern_invariant(self, bands):
+        """
+        Fukui-Hatsugai non-Abelian Chern number for a set of occupied bands.
+        Returns (C, F) where F[i,j] is the flux (radians) on each plaquette and
+        C is the total Chern number (sum(F)/(2*pi)).
+        """
+        assert(self.tight_binding.location == "bulk")
+        print("Calculating non-Abelian Chern Invariant...")
+        geometry = self.geometry
+        N_k = geometry.N_k
+        kx = geometry.kx_bulk
+        ky = geometry.ky_bulk
+        U_k = self.tight_binding.U_k_dict
+        sample_key = f"[{kx[0]}, {ky[0]}]"
+        N_bands = U_k[sample_key].shape[1]
+        N_occ_bands = list(range(N_bands)) if bands == [] else list(bands)
+        F = np.zeros((N_k, N_k), dtype=float)
+        for i in range(N_k):
+            ip = (i + 1) % N_k
+            for j in range(N_k):
+                if not geometry.BZ_mask[i, j]:
+                    continue
+                jp = (j + 1) % N_k
+                U00 = U_k[f"[{kx[i]}, {ky[j]}]"][:, N_occ_bands]
+                U10 = U_k[f"[{kx[ip]}, {ky[j]}]"][:, N_occ_bands]
+                U11 = U_k[f"[{kx[ip]}, {ky[jp]}]"][:, N_occ_bands]
+                U01 = U_k[f"[{kx[i]}, {ky[jp]}]"][:, N_occ_bands]
+                # M_x(k)_{mn} = <u_m(k) | u_n(k+dx)>
+                M1 = np.conj(U00).T @ U10
+                M2 = np.conj(U10).T @ U11
+                M3 = np.conj(U11).T @ U01
+                M4 = np.conj(U01).T @ U00
+                U1 = self._non_abelian_phase(M1)
+                U2 = self._non_abelian_phase(M2)
+                U3 = self._non_abelian_phase(M3)
+                U4 = self._non_abelian_phase(M4)
+                F[i, j] = np.angle( U1 * U2 * U3 * U4)
+        C = F.sum() / (2 * np.pi)
+        print("Non-Abelian Chern Invariant - Done!")
+        return C, F
+    
+    def _non_abelian_phase(self, M):
+        det = np.linalg.det(M)
+        return det / np.abs(det)
 
-    def get_local_density_of_states(self, site_idx:int = 0,
-                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1,):
+    def get_density_of_states(self,
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1):
+        assert(self.tight_binding.location == "edge")
         geometry = self.geometry
         tb = self.tight_binding
         k_edge = geometry.k_edge
         N_projections = len(tb.coupled_states)
         N_bands = len(tb.sublattice_idxs) * N_projections
         E = np.linspace(E_min, E_max, N_E)
-        Psi_dict = tb.band_structure_data["eigenvector_dict"]
+        DOS = np.zeros_like(E)
+        for i in range(len(self.sublattice_idxs)):
+            for k_idx, k in enumerate(k_edge):
+                E_k = tb.E_k_dict[f"{k}"] 
+                for n in range(N_bands):
+                    weight = tb.weight(k_idx, i, n)
+                    DOS += weight * self._lorentz(E, E_k[n], eta)
+        DOS /= len(k_edge)
+        return E, DOS
+    
+    def get_local_density_of_states(self, site_idx:int = 0,
+                                 E_max=10, E_min=-10,  N_E=1000, eta:float=1e-1):
+        assert(self.tight_binding.location == "edge")
+        geometry = self.geometry
+        tb = self.tight_binding
+        k_edge = geometry.k_edge
+        N_projections = len(tb.coupled_states)
+        N_bands = len(tb.sublattice_idxs) * N_projections
+        E = np.linspace(E_min, E_max, N_E)
         LDOS = np.zeros_like(E)
         for k_idx, k in enumerate(k_edge):
             E_k = tb.E_k_dict[f"{k}"] 
             for n in range(N_bands):
-                Psi_k = Psi_dict[n][k_idx, :]
-                start = site_idx * N_projections
-                end   = (site_idx + 1)*N_projections
-                c_i = Psi_k[start:end]
-                weight = np.sum(np.abs(c_i)**2)
+                weight = tb.weight(k_idx, site_idx, n)
                 LDOS += weight * self._lorentz(E, E_k[n], eta)
         LDOS /= len(k_edge)
         return E, LDOS
     
     def _lorentz(self, E, E0, eta):
         return (1/np.pi) * (eta / ((E - E0)**2 + eta**2))
+
+    def get_band_gap(self, n, m, only_dE:bool=True, ):
+        assert(self.tight_binding.location == "bulk")
+        geometry = self.geometry
+        tb = self.tight_binding
+        # NOTE: numpy.linalg.eigh returns eigenvalues in ascending order
+        E_0 = tb.E_k_dict[f"{geometry.K_point}"][n]
+        E_1 = tb.E_k_dict[f"{geometry.Gamma}"][m]
+        dE = E_0 - E_1
+        if only_dE:
+            return dE
+        else:
+            return dE, E_0, E_1
     
     def plot_berry_flux(self, F:np.ndarray=None):
-        g = self.geometry
-        k_x, k_y = g.kx_bulk, g.ky_bulk
+        geometry = self.geometry
+        k_x, k_y = geometry.kx_bulk, geometry.ky_bulk
         KX_full, KY_full = np.meshgrid(k_x, k_y, indexing='ij')
         fig = plt.figure(figsize=(7,7))
         ax  = fig.add_subplot(111, projection='3d')
@@ -142,26 +218,33 @@ class TopologicalInvariants(Notation):
         plt.show()
 
     def plot_density_of_states(self, E_vals: np.ndarray,
-                            LDOS: np.ndarray,
+                            DOS: np.ndarray,
                             figsize: tuple = (8, 7),
-                            annotate_max: bool = True):
+                            annotate_max: bool = True,
+                            xlabel:str = "LDOS"):
         """
-        Plot LDOS vs. energy and, optionally, mark the energy at which LDOS is maximal,
+        Plot LDOS/DOS vs. energy and, optionally, mark the energy at which LDOS is maximal,
         all on the same axes.
         """
-        idx_max = np.argmax(LDOS)
+        idx_max = np.argmax(DOS)
         E_peak = E_vals[idx_max]
         fig, ax = plt.subplots(figsize=figsize)
-        ax.plot(E_vals, LDOS, color="k", lw=1.8)
+        # ax.plot(E_vals, LDOS, color="k", lw=1.8)
+        ax.plot(DOS, E_vals, color="k", lw=1.8)
         if annotate_max:
-            ax.axvline(E_peak,
-                    color="r",
-                    linestyle='--',
-                    linewidth=1.5,
-                    label=f'Max LDOS at {E_peak:.2f} eV')
-        ax.set_xlabel("Energy (eV)", fontsize=12)
-        ax.set_ylabel("LDOS (a.u.)", fontsize=12)
-        ax.set_title("Local Density of States", fontsize=14)
+            ax.axhline(
+                E_peak,
+                color="r",
+                linestyle='--',
+                linewidth=1.5,
+                label=f'Max {xlabel} at {E_peak:.2f} eV'
+            )
+        ax.set_ylabel("Energy (eV)", fontsize=12)
+        ax.set_xlabel(f"{xlabel} (a.u.)", fontsize=12)
+        if xlabel == "LDOS":
+            ax.set_title("Local Density of States", fontsize=14)
+        else:
+            ax.set_title("Total Density of States", fontsize=14)
         ax.legend(frameon=True)
         ax.grid(True, ls=':', alpha=0.6)
 

@@ -1,0 +1,17 @@
+{
+    "name":"silicene",
+    "source": "Tight-binding model and ab initio calculation of silicene with strong spin-orbit coupling in low-energy limit Chen-Huan Wu 2018",
+    "lattice_constant": 3.86,
+    "buckling_cosine": -0.1980,
+    "eigenvalues": {
+        "E_s": -5.44,
+        "E_p": 0,
+        "t_ss_sigma": -1.93,
+        "t_sp_sigma": 2.54,
+        "t_pp_sigma": 4.47,
+        "t_pp_pi": -1.12,
+        "Delta_pp": 34e-3,
+        "lambda_ss": 0,
+        "lambda_pp": 3.97e-3
+    }
+}
