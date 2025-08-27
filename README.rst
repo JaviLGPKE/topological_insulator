@@ -1,7 +1,8 @@
 Topological Insulator
 ------------
 
-Tight-Binding approximation which includes **nearest neighbour hopping** and **spin orbit coupling** Hamiltonian terms.
+Tight-Binding approximation, for 2D structures, which includes **nearest neighbour hopping**, **spin orbit coupling** and **mean-field interaction** Hamiltonian terms. 
+As well as featuring the ability to compute the Chern invariant, Z2 invariant and (L)DOS. Examples are provided within the repository.
 
 Installation
 ------------
